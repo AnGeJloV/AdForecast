@@ -1,5 +1,12 @@
 package by.bsuir.adforecast.upload;
 
+import by.bsuir.adforecast.domain.UploadFormat;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellType;
+import org.apache.poi.ss.usermodel.DateUtil;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -19,14 +26,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-
-import by.bsuir.adforecast.domain.UploadFormat;
-import org.apache.poi.ss.usermodel.Cell;
-import org.apache.poi.ss.usermodel.CellType;
-import org.apache.poi.ss.usermodel.DateUtil;
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 @Component
 public class StatsParser {
@@ -89,7 +88,7 @@ public class StatsParser {
         try (XSSFWorkbook workbook = new XSSFWorkbook(input)) {
             Sheet sheet = workbook.getSheetAt(0);
             Row header = sheet.getRow(0);
-            if (header == null) {
+            if (header == null || header.getLastCellNum() <= 0) {
                 return new ParsedRows(List.of(), List.of("файл пуст"));
             }
             Map<String, Integer> columns = mapColumns(readHeader(header));
@@ -122,7 +121,7 @@ public class StatsParser {
             return;
         }
         if (!dates.add(date)) {
-            errors.add(label + ": дата " + date + " повторяется в файле");
+            fail(errors, label, "дата " + date + " повторяется в файле");
             return;
         }
         rows.add(new MetricRow(date, impressions, clicks, cost, revenue));
@@ -233,6 +232,6 @@ public class StatsParser {
     }
 
     private String stripBom(String line) {
-        return line.startsWith("﻿") ? line.substring(1) : line;
+        return line.startsWith("\ufeff") ? line.substring(1) : line;
     }
 }

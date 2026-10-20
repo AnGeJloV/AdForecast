@@ -43,7 +43,7 @@ public class UploadService {
     }
 
     public UploadResponse upload(long campaignId, boolean admin, long userId, MultipartFile file) {
-        campaignRepository.findById(campaignId)
+        Campaign campaign = campaignRepository.findById(campaignId)
                 .orElseThrow(() -> new EntityNotFoundException("кампания не найдена"));
         if (!admin) {
             campaignService.requireAccess(userId, campaignId);
@@ -73,7 +73,7 @@ public class UploadService {
         }
 
         Upload upload = new Upload();
-        upload.setCampaign(campaignRepository.getReferenceById(campaignId));
+        upload.setCampaign(campaign);
         upload.setFileName(resolveFileName(file, format));
         upload.setFileFormat(format);
         upload.setPeriodStart(start);

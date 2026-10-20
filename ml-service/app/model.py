@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 import numpy as np
 from catboost import CatBoostRegressor, Pool
@@ -90,8 +91,6 @@ def train_ensemble(
     predictions = [predict_ensemble_from(members, [record])[0] for record in holdout_records]
     actual = [record[TARGET] for record in holdout_records]
     metrics = _metrics(actual, [p["payback_ratio"] for p in predictions])
-
-    from datetime import datetime, timezone
 
     meta = {
         "name": "adforecast_roi",

@@ -6,8 +6,10 @@
 
 ```bash
 python generate.py
-docker exec -i adforecast-db-1 psql -U adforecast -d adforecast -v ON_ERROR_STOP=1 < seed_data.sql
+docker exec -i adforecast-db-1 psql -U adforecast -d adforecast -v ON_ERROR_STOP=1 -1 < seed_data.sql
 ```
+
+Флаг `-1` применяет загрузку одной транзакцией. Перед повторной загрузкой очистите данные: `TRUNCATE daily_metrics, uploads, campaign_access, campaigns, ad_accounts, forecasts, forecast_params, forecast_results, export_history, ml_models RESTART IDENTITY CASCADE`.
 
 Параметры по умолчанию: 800 завершенных, 12 активных и 8 планируемых кампаний, около 37 тысяч дневных показателей, 6 CSV-выгрузок в `exports`. Полный список параметров: `python generate.py --help`.
 

@@ -1,10 +1,10 @@
 package by.bsuir.adforecast.campaign;
 
 import by.bsuir.adforecast.security.AuthPrincipal;
+import by.bsuir.adforecast.security.Roles;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,8 +19,6 @@ import java.util.List;
 @RequestMapping("/api/campaigns")
 public class CampaignController {
 
-    private static final String ADMIN_AUTHORITY = "ROLE_администратор";
-
     private final CampaignService campaignService;
 
     public CampaignController(CampaignService campaignService) {
@@ -30,7 +28,7 @@ public class CampaignController {
     @GetMapping
     public List<CampaignSummaryResponse> list(Authentication authentication) {
         AuthPrincipal principal = (AuthPrincipal) authentication.getPrincipal();
-        if (isAdmin(authentication)) {
+        if (Roles.isAdmin(authentication)) {
             return campaignService.listAll();
         }
         return campaignService.listForUser(principal.userId());
@@ -39,7 +37,7 @@ public class CampaignController {
     @GetMapping("/{id}")
     public CampaignDetailResponse get(@PathVariable("id") long id, Authentication authentication) {
         AuthPrincipal principal = (AuthPrincipal) authentication.getPrincipal();
-        return campaignService.get(id, isAdmin(authentication), principal.userId());
+        return campaignService.get(id, Roles.isAdmin(authentication), principal.userId());
     }
 
     @PostMapping
@@ -56,12 +54,6 @@ public class CampaignController {
                                           @Valid @RequestBody CampaignUpdateRequest request,
                                           Authentication authentication) {
         AuthPrincipal principal = (AuthPrincipal) authentication.getPrincipal();
-        return campaignService.update(id, isAdmin(authentication), principal.userId(), request);
-    }
-
-    private boolean isAdmin(Authentication authentication) {
-        return authentication.getAuthorities().stream()
-                .map(GrantedAuthority::getAuthority)
-                .anyMatch(ADMIN_AUTHORITY::equals);
+        return campaignService.update(id, Roles.isAdmin(authentication), principal.userId(), request);
     }
 }

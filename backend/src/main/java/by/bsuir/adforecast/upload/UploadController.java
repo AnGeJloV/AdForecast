@@ -1,10 +1,10 @@
 package by.bsuir.adforecast.upload;
 
 import by.bsuir.adforecast.security.AuthPrincipal;
+import by.bsuir.adforecast.security.Roles;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -20,7 +20,6 @@ import java.util.List;
 @RequestMapping("/api/campaigns/{campaignId}/uploads")
 public class UploadController {
 
-    private static final String ADMIN_AUTHORITY = "ROLE_администратор";
 
     private final UploadService uploadService;
 
@@ -35,7 +34,7 @@ public class UploadController {
                                  @RequestParam("file") MultipartFile file,
                                  Authentication authentication) {
         AuthPrincipal principal = (AuthPrincipal) authentication.getPrincipal();
-        return uploadService.upload(campaignId, isAdmin(authentication), principal.userId(), file);
+        return uploadService.upload(campaignId, Roles.isAdmin(authentication), principal.userId(), file);
     }
 
     @GetMapping
@@ -43,9 +42,4 @@ public class UploadController {
         return uploadService.history(campaignId);
     }
 
-    private boolean isAdmin(Authentication authentication) {
-        return authentication.getAuthorities().stream()
-                .map(GrantedAuthority::getAuthority)
-                .anyMatch(ADMIN_AUTHORITY::equals);
-    }
 }

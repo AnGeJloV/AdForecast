@@ -1,5 +1,7 @@
 package by.bsuir.adforecast.upload;
 
+import by.bsuir.adforecast.domain.Upload;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -13,7 +15,7 @@ public record UploadResponse(
         long rowsCount
 ) {
 
-    public static UploadResponse of(by.bsuir.adforecast.domain.Upload upload, long rowsCount) {
+    public static UploadResponse of(Upload upload, long rowsCount) {
         return new UploadResponse(
                 upload.getId(),
                 upload.getFileName(),

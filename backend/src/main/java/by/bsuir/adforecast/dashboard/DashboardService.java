@@ -47,6 +47,7 @@ public class DashboardService {
                         .setScale(2, RoundingMode.HALF_UP);
 
         long profitable = summaries.stream()
+                .filter(summary -> "FINISHED".equals(summary.getStatus()))
                 .map(CampaignSummaryProjection::getActualRoi)
                 .filter(roi -> roi != null && roi.signum() > 0)
                 .count();

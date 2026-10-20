@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 
 from . import schemas
-from .service import ModelNotReadyError, MlService, VersionNotFoundError
+from .service import ModelNotReadyError, MlService, TaskNotFoundError, VersionNotFoundError
 from .store import ModelStore, model_metrics
 
 MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
@@ -29,7 +29,7 @@ def create_app() -> FastAPI:
     def train_status(task_id: str) -> schemas.TrainStatusResponse:
         try:
             task = service.training_status(task_id)
-        except VersionNotFoundError:
+        except TaskNotFoundError:
             raise HTTPException(status_code=404, detail="задача не найдена")
         return schemas.TrainStatusResponse(
             task_id=task_id,

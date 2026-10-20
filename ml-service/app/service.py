@@ -16,6 +16,10 @@ class VersionNotFoundError(RuntimeError):
     pass
 
 
+class TaskNotFoundError(RuntimeError):
+    pass
+
+
 @dataclass
 class TrainingTask:
     status: str
@@ -44,7 +48,7 @@ class MlService:
     def training_status(self, task_id: str) -> TrainingTask:
         task = self._tasks.get(task_id)
         if task is None:
-            raise VersionNotFoundError(task_id)
+            raise TaskNotFoundError(task_id)
         return task
 
     def _run_training(self, task_id: str, records: list[dict], ensemble_size: int, holdout_fraction: float) -> None:
