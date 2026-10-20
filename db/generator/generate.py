@@ -161,7 +161,7 @@ def main() -> None:
         if not campaign["metrics"]:
             continue
         uploads.append(
-            (upload_id, campaign["campaign_id"], f"export_{campaign['name']}.csv", "csv",
+            (upload_id, campaign["campaign_id"], f"export_{campaign['name']}.csv", "CSV",
              campaign["start"], campaign["end"], campaign["end"] + timedelta(days=1))
         )
         for i, (impressions, clicks, cost, revenue) in enumerate(campaign["metrics"]):

@@ -1,5 +1,6 @@
 package by.bsuir.adforecast.web;
 
+import by.bsuir.adforecast.upload.UploadException;
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -7,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -35,6 +37,18 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.NOT_FOUND)
     public ErrorResponse notFound(EntityNotFoundException exception) {
         return new ErrorResponse(exception.getMessage());
+    }
+
+    @ExceptionHandler(UploadException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ValidationErrorResponse upload(UploadException exception) {
+        return new ValidationErrorResponse("файл не прошел проверку", exception.getErrors());
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ErrorResponse tooLarge() {
+        return new ErrorResponse("файл превышает допустимый размер 10 МБ");
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
@@ -71,5 +85,8 @@ public class GlobalExceptionHandler {
     }
 
     public record ErrorResponse(String message) {
+    }
+
+    public record ValidationErrorResponse(String message, java.util.List<String> errors) {
     }
 }

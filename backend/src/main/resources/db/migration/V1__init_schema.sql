@@ -47,7 +47,7 @@ CREATE TABLE uploads (
     upload_id BIGSERIAL PRIMARY KEY,
     campaign_id BIGINT NOT NULL REFERENCES campaigns (campaign_id),
     file_name VARCHAR(255) NOT NULL,
-    file_format VARCHAR(10) NOT NULL CHECK (file_format IN ('csv', 'xlsx')),
+    file_format VARCHAR(10) NOT NULL CHECK (file_format IN ('CSV', 'XLSX')),
     period_start DATE NOT NULL,
     period_end DATE NOT NULL,
     uploaded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -102,7 +102,7 @@ CREATE TABLE forecast_results (
 CREATE TABLE export_history (
     log_id BIGSERIAL PRIMARY KEY,
     forecast_id BIGINT NOT NULL REFERENCES forecasts (forecast_id),
-    export_format VARCHAR(10) NOT NULL CHECK (export_format IN ('pdf', 'xlsx')),
+    export_format VARCHAR(10) NOT NULL CHECK (export_format IN ('PDF', 'XLSX')),
     export_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
