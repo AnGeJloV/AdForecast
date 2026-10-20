@@ -6,10 +6,20 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface ForecastRepository extends JpaRepository<Forecast, Long> {
 
     List<Forecast> findByCampaignIdOrderByStartedAtDesc(long campaignId);
+
+    @Query("""
+            select forecast
+            from Forecast forecast
+            join fetch forecast.model
+            join fetch forecast.campaign
+            where forecast.id = :id
+            """)
+    Optional<Forecast> findByIdWithModel(@Param("id") long id);
 
     @Query(value = "select count(*) from forecasts", nativeQuery = true)
     long countAll();

@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -26,6 +27,12 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.UNAUTHORIZED)
     public ErrorResponse badCredentials() {
         return new ErrorResponse("неверный логин или пароль");
+    }
+
+    @ExceptionHandler(DisabledException.class)
+    @ResponseStatus(HttpStatus.UNAUTHORIZED)
+    public ErrorResponse disabled() {
+        return new ErrorResponse("учетная запись заблокирована");
     }
 
     @ExceptionHandler(AccessDeniedException.class)
@@ -55,6 +62,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ErrorResponse badArgument(IllegalArgumentException exception) {
+        return new ErrorResponse(exception.getMessage());
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ErrorResponse conflict(IllegalStateException exception) {
         return new ErrorResponse(exception.getMessage());
     }
 

@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<User, Long> {
@@ -16,4 +17,21 @@ public interface UserRepository extends JpaRepository<User, Long> {
             where user.login = :login
             """)
     Optional<User> findByLogin(@Param("login") String login);
+
+    @Query("select user from User user join fetch user.role")
+    List<User> findAllWithRole();
+
+    @Query("""
+            select user
+            from User user
+            join fetch user.role
+            where user.id = :id
+            """)
+    Optional<User> findByIdWithRole(@Param("id") long id);
+
+    boolean existsByLogin(String login);
+
+    boolean existsByEmail(String email);
+
+    boolean existsByEmailAndIdNot(String email, Long id);
 }
