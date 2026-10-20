@@ -5,7 +5,11 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
+
 public interface ForecastRepository extends JpaRepository<Forecast, Long> {
+
+    List<Forecast> findByCampaignIdOrderByStartedAtDesc(long campaignId);
 
     @Query(value = "select count(*) from forecasts", nativeQuery = true)
     long countAll();

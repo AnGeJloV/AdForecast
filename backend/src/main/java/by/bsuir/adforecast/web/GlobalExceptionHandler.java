@@ -1,5 +1,6 @@
 package by.bsuir.adforecast.web;
 
+import by.bsuir.adforecast.mlclient.MlServiceException;
 import by.bsuir.adforecast.upload.UploadException;
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
@@ -43,6 +44,18 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ValidationErrorResponse upload(UploadException exception) {
         return new ValidationErrorResponse("файл не прошел проверку", exception.getErrors());
+    }
+
+    @ExceptionHandler(MlServiceException.class)
+    @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
+    public ErrorResponse mlUnavailable(MlServiceException exception) {
+        return new ErrorResponse(exception.getMessage());
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ErrorResponse badArgument(IllegalArgumentException exception) {
+        return new ErrorResponse(exception.getMessage());
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
