@@ -14,3 +14,8 @@ spring:
 
 ml-service:
   base-url: ${ML_SERVICE_BASE_URL:http://localhost:8000}
+
+adforecast:
+  jwt:
+    secret: ${JWT_SECRET}
+    ttl: ${JWT_TTL:8h}

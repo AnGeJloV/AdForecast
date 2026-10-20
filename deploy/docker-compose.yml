@@ -23,6 +23,7 @@ services:
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-adforecast}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       ML_SERVICE_BASE_URL: http://ml-service:8000
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
     depends_on:
       db:
         condition: service_healthy

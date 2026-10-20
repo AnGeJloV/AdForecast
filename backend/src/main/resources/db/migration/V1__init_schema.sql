@@ -1,17 +1,17 @@
 CREATE TABLE roles (
-    role_id SERIAL PRIMARY KEY,
+    role_id BIGSERIAL PRIMARY KEY,
     role_name VARCHAR(100) NOT NULL UNIQUE
 );
 
 CREATE TABLE permissions (
-    permission_id SERIAL PRIMARY KEY,
-    role_id INTEGER NOT NULL REFERENCES roles (role_id),
+    permission_id BIGSERIAL PRIMARY KEY,
+    role_id BIGINT NOT NULL REFERENCES roles (role_id),
     permission_code VARCHAR(100) NOT NULL
 );
 
 CREATE TABLE users (
-    user_id SERIAL PRIMARY KEY,
-    role_id INTEGER NOT NULL REFERENCES roles (role_id),
+    user_id BIGSERIAL PRIMARY KEY,
+    role_id BIGINT NOT NULL REFERENCES roles (role_id),
     login VARCHAR(255) NOT NULL UNIQUE,
     email VARCHAR(255) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
@@ -20,15 +20,15 @@ CREATE TABLE users (
 );
 
 CREATE TABLE ad_accounts (
-    account_id SERIAL PRIMARY KEY,
+    account_id BIGSERIAL PRIMARY KEY,
     account_name VARCHAR(255) NOT NULL,
     platform VARCHAR(100) NOT NULL,
     connected_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE campaigns (
-    campaign_id SERIAL PRIMARY KEY,
-    account_id INTEGER NOT NULL REFERENCES ad_accounts (account_id),
+    campaign_id BIGSERIAL PRIMARY KEY,
+    account_id BIGINT NOT NULL REFERENCES ad_accounts (account_id),
     campaign_name VARCHAR(255) NOT NULL,
     budget NUMERIC(12, 2) NOT NULL CHECK (budget >= 0),
     currency VARCHAR(10) NOT NULL,
@@ -37,15 +37,15 @@ CREATE TABLE campaigns (
 );
 
 CREATE TABLE campaign_access (
-    access_id SERIAL PRIMARY KEY,
-    user_id INTEGER NOT NULL REFERENCES users (user_id),
-    campaign_id INTEGER NOT NULL REFERENCES campaigns (campaign_id),
+    access_id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users (user_id),
+    campaign_id BIGINT NOT NULL REFERENCES campaigns (campaign_id),
     UNIQUE (user_id, campaign_id)
 );
 
 CREATE TABLE uploads (
-    upload_id SERIAL PRIMARY KEY,
-    campaign_id INTEGER NOT NULL REFERENCES campaigns (campaign_id),
+    upload_id BIGSERIAL PRIMARY KEY,
+    campaign_id BIGINT NOT NULL REFERENCES campaigns (campaign_id),
     file_name VARCHAR(255) NOT NULL,
     file_format VARCHAR(10) NOT NULL CHECK (file_format IN ('csv', 'xlsx')),
     period_start DATE NOT NULL,
@@ -55,8 +55,8 @@ CREATE TABLE uploads (
 );
 
 CREATE TABLE daily_metrics (
-    metric_id SERIAL PRIMARY KEY,
-    upload_id INTEGER NOT NULL REFERENCES uploads (upload_id),
+    metric_id BIGSERIAL PRIMARY KEY,
+    upload_id BIGINT NOT NULL REFERENCES uploads (upload_id),
     metric_date DATE NOT NULL,
     cost NUMERIC(12, 2) NOT NULL CHECK (cost >= 0),
     revenue NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (revenue >= 0),
@@ -66,7 +66,7 @@ CREATE TABLE daily_metrics (
 );
 
 CREATE TABLE ml_models (
-    model_id SERIAL PRIMARY KEY,
+    model_id BIGSERIAL PRIMARY KEY,
     model_name VARCHAR(255) NOT NULL,
     model_version VARCHAR(50) NOT NULL,
     trained_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -75,24 +75,24 @@ CREATE TABLE ml_models (
 );
 
 CREATE TABLE forecasts (
-    forecast_id SERIAL PRIMARY KEY,
-    campaign_id INTEGER NOT NULL REFERENCES campaigns (campaign_id),
-    model_id INTEGER NOT NULL REFERENCES ml_models (model_id),
+    forecast_id BIGSERIAL PRIMARY KEY,
+    campaign_id BIGINT NOT NULL REFERENCES campaigns (campaign_id),
+    model_id BIGINT NOT NULL REFERENCES ml_models (model_id),
     started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     status VARCHAR(50) NOT NULL CHECK (status IN ('PENDING', 'RUNNING', 'COMPLETED', 'FAILED'))
 );
 
 CREATE TABLE forecast_params (
-    param_id SERIAL PRIMARY KEY,
-    forecast_id INTEGER NOT NULL UNIQUE REFERENCES forecasts (forecast_id),
+    param_id BIGSERIAL PRIMARY KEY,
+    forecast_id BIGINT NOT NULL UNIQUE REFERENCES forecasts (forecast_id),
     horizon_days INTEGER NOT NULL CHECK (horizon_days > 0),
     confidence_level NUMERIC(4, 2) NOT NULL CHECK (confidence_level >= 0 AND confidence_level <= 1),
     use_seasonality BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE TABLE forecast_results (
-    result_id SERIAL PRIMARY KEY,
-    forecast_id INTEGER NOT NULL UNIQUE REFERENCES forecasts (forecast_id),
+    result_id BIGSERIAL PRIMARY KEY,
+    forecast_id BIGINT NOT NULL UNIQUE REFERENCES forecasts (forecast_id),
     payback_months NUMERIC(6, 2),
     forecast_roi NUMERIC(8, 2),
     payback_probability NUMERIC(5, 2) CHECK (payback_probability IS NULL OR (payback_probability >= 0 AND payback_probability <= 1)),
@@ -100,8 +100,8 @@ CREATE TABLE forecast_results (
 );
 
 CREATE TABLE export_history (
-    log_id SERIAL PRIMARY KEY,
-    forecast_id INTEGER NOT NULL REFERENCES forecasts (forecast_id),
+    log_id BIGSERIAL PRIMARY KEY,
+    forecast_id BIGINT NOT NULL REFERENCES forecasts (forecast_id),
     export_format VARCHAR(10) NOT NULL CHECK (export_format IN ('pdf', 'xlsx')),
     export_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
