@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: adforecast-backend
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/adforecast}
+    username: ${SPRING_DATASOURCE_USERNAME:adforecast}
+    password: ${SPRING_DATASOURCE_PASSWORD:adforecast}
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+
+ml-service:
+  base-url: ${ML_SERVICE_BASE_URL:http://localhost:8000}
