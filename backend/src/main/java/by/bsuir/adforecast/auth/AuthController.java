@@ -3,6 +3,7 @@ package by.bsuir.adforecast.auth;
 import by.bsuir.adforecast.domain.User;
 import by.bsuir.adforecast.repo.PermissionRepository;
 import by.bsuir.adforecast.repo.UserRepository;
+import by.bsuir.adforecast.security.AuthPrincipal;
 import by.bsuir.adforecast.security.JwtService;
 import jakarta.validation.Valid;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -48,12 +49,13 @@ public class AuthController {
                 .toList();
         user.setLastLogin(LocalDateTime.now());
         userRepository.save(user);
-        String token = jwtService.issue(user.getLogin(), user.getRole().getRoleName(), permissions);
+        String token = jwtService.issue(user.getId(), user.getLogin(), user.getRole().getRoleName(), permissions);
         return new LoginResponse(token, user.getLogin(), user.getRole().getRoleName());
     }
 
     @GetMapping("/me")
     public CurrentUserResponse me(Authentication authentication) {
+        AuthPrincipal principal = (AuthPrincipal) authentication.getPrincipal();
         String role = authentication.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .filter(authority -> authority.startsWith("ROLE_"))
@@ -64,6 +66,6 @@ public class AuthController {
                 .map(GrantedAuthority::getAuthority)
                 .filter(authority -> !authority.startsWith("ROLE_"))
                 .toList();
-        return CurrentUserResponse.of(authentication.getName(), role, permissions);
+        return CurrentUserResponse.of(principal.login(), role, permissions);
     }
 }

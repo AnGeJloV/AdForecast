@@ -25,10 +25,11 @@ public class JwtService {
         this.ttl = ttl;
     }
 
-    public String issue(String login, String role, List<String> permissions) {
+    public String issue(Long userId, String login, String role, List<String> permissions) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .subject(login)
+                .claim("uid", userId)
                 .claim("role", role)
                 .claim("perms", permissions)
                 .issuedAt(Date.from(now))

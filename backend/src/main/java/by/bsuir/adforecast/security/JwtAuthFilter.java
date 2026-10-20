@@ -38,8 +38,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 if (permissions instanceof List<?> codes) {
                     codes.forEach(code -> authorities.add(new SimpleGrantedAuthority(String.valueOf(code))));
                 }
+                Long userId = claims.get("uid") instanceof Number number ? number.longValue() : null;
+                AuthPrincipal principal = new AuthPrincipal(userId, claims.getSubject());
                 UsernamePasswordAuthenticationToken authentication =
-                        new UsernamePasswordAuthenticationToken(claims.getSubject(), null, authorities);
+                        new UsernamePasswordAuthenticationToken(principal, null, authorities);
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             } catch (JwtException | IllegalArgumentException ignored) {
                 SecurityContextHolder.clearContext();
