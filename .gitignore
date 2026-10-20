@@ -12,3 +12,5 @@ __pycache__/
 *.iml
 .DS_Store
 Thumbs.db
+db/generator/seed_data.sql
+db/backup/adforecast_*.sql

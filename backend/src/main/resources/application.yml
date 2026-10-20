@@ -5,9 +5,11 @@ spring:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/adforecast}
     username: ${SPRING_DATASOURCE_USERNAME:adforecast}
     password: ${SPRING_DATASOURCE_PASSWORD:adforecast}
+  flyway:
+    locations: classpath:db/migration
   jpa:
     hibernate:
-      ddl-auto: none
+      ddl-auto: validate
     open-in-view: false
 
 ml-service:
