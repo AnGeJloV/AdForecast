@@ -118,11 +118,11 @@ def write_batches(out, table: str, columns: list, rows: list, seq: str) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Генерация синтетических данных AdForecast")
-    parser.add_argument("--campaigns", type=int, default=480, help="количество завершенных кампаний")
+    parser.add_argument("--campaigns", type=int, default=800, help="количество завершенных кампаний")
     parser.add_argument("--active", type=int, default=12, help="количество активных кампаний")
     parser.add_argument("--planned", type=int, default=8, help="количество планируемых кампаний")
     parser.add_argument("--exports", type=int, default=6, help="количество CSV-выгрузок рекламных кабинетов")
-    parser.add_argument("--noise", type=float, default=0.15, help="уровень шума ROI кампании")
+    parser.add_argument("--noise", type=float, default=0.08, help="уровень шума ROI кампании")
     parser.add_argument("--seed", type=int, default=42, help="зерно генератора")
     parser.add_argument("--outdir", type=Path, default=Path(__file__).parent, help="каталог результатов")
     args = parser.parse_args()

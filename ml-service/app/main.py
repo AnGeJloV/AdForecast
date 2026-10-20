@@ -1,12 +1,58 @@
-from fastapi import FastAPI
+from __future__ import annotations
+
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException
+
+from . import schemas
+from .service import ModelNotReadyError, MlService, VersionNotFoundError
+from .store import ModelStore, model_metrics
+
+MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
 
 
 def create_app() -> FastAPI:
     app = FastAPI(title="AdForecast ML Service", version="0.1.0")
+    service = MlService(ModelStore(MODELS_DIR))
 
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.post("/train", status_code=202)
+    def train(request: schemas.TrainRequest) -> schemas.TrainAcceptedResponse:
+        records = [record.model_dump() for record in request.records]
+        task_id = service.submit_training(records, request.ensemble_size, request.holdout_fraction)
+        return schemas.TrainAcceptedResponse(task_id=task_id, status="RUNNING")
+
+    @app.get("/train/{task_id}")
+    def train_status(task_id: str) -> schemas.TrainStatusResponse:
+        try:
+            task = service.training_status(task_id)
+        except VersionNotFoundError:
+            raise HTTPException(status_code=404, detail="задача не найдена")
+        return schemas.TrainStatusResponse(
+            task_id=task_id,
+            status=task.status,
+            model=None if task.model is None else schemas.ModelMetrics(**model_metrics(task.model)),
+            error=task.error,
+        )
+
+    @app.post("/predict")
+    def predict(request: schemas.PredictRequest) -> schemas.PredictResponse:
+        try:
+            result = service.predict(request.model_dump())
+        except ModelNotReadyError:
+            raise HTTPException(status_code=503, detail="нет обученных моделей")
+        except VersionNotFoundError as error:
+            raise HTTPException(status_code=404, detail=f"версия модели не найдена: {error}")
+        return schemas.PredictResponse(**result)
+
+    @app.get("/models")
+    def models() -> schemas.ModelListResponse:
+        return schemas.ModelListResponse(
+            models=[schemas.ModelMetrics(**model_metrics(meta)) for meta in service.store.list()]
+        )
 
     return app
 
