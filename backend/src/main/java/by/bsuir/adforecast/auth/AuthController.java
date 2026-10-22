@@ -1,5 +1,6 @@
 package by.bsuir.adforecast.auth;
 
+import by.bsuir.adforecast.audit.AuditService;
 import by.bsuir.adforecast.domain.User;
 import by.bsuir.adforecast.repo.PermissionRepository;
 import by.bsuir.adforecast.repo.UserRepository;
@@ -32,24 +33,38 @@ public class AuthController {
     private final PermissionRepository permissionRepository;
     private final JwtService jwtService;
     private final UserService userService;
+    private final AuditService auditService;
 
     public AuthController(AuthenticationManager authenticationManager,
                           UserRepository userRepository,
                           PermissionRepository permissionRepository,
                           JwtService jwtService,
-                          UserService userService) {
+                          UserService userService,
+                          AuditService auditService) {
         this.authenticationManager = authenticationManager;
         this.userRepository = userRepository;
         this.permissionRepository = permissionRepository;
         this.jwtService = jwtService;
         this.userService = userService;
+        this.auditService = auditService;
     }
 
     @PostMapping("/login")
     public LoginResponse login(@Valid @RequestBody LoginRequest request) {
         authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(request.login(), request.password()));
-        return issueLogin(userRepository.findByLogin(request.login()).orElseThrow());
+        User user = userRepository.findByLogin(request.login()).orElseThrow();
+        auditService.record(user.getId(), "вход в систему", "пользователь", user.getId(),
+                "логин " + user.getLogin());
+        return issueLogin(user);
+    }
+
+    @PostMapping("/logout")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void logout(Authentication authentication) {
+        AuthPrincipal principal = (AuthPrincipal) authentication.getPrincipal();
+        auditService.record(principal.userId(), "выход из системы", "пользователь", principal.userId(),
+                "логин " + principal.login());
     }
 
     @PostMapping("/register")

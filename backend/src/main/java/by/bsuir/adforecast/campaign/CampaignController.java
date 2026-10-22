@@ -36,6 +36,12 @@ public class CampaignController {
         return campaignService.get(id, principal.userId());
     }
 
+    @GetMapping("/{id}/metrics")
+    public List<DailyMetricPoint> metrics(@PathVariable("id") long id, Authentication authentication) {
+        AuthPrincipal principal = (AuthPrincipal) authentication.getPrincipal();
+        return campaignService.metrics(id, principal.userId());
+    }
+
     @PostMapping
     @PreAuthorize("hasAuthority('campaign.manage')")
     public CampaignSummaryResponse create(@Valid @RequestBody CampaignCreateRequest request,

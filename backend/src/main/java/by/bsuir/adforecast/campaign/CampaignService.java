@@ -9,6 +9,7 @@ import by.bsuir.adforecast.repo.CampaignAccessRepository;
 import by.bsuir.adforecast.repo.CampaignRepository;
 import by.bsuir.adforecast.repo.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,19 +21,30 @@ import java.util.List;
 @Transactional
 public class CampaignService {
 
+    private static final String METRICS_SQL = """
+            select m.metric_date, m.cost, m.revenue, m.impressions, m.clicks
+            from daily_metrics m
+            join uploads u on u.upload_id = m.upload_id
+            where u.campaign_id = ?
+            order by m.metric_date
+            """;
+
     private final CampaignRepository campaignRepository;
     private final CampaignAccessRepository campaignAccessRepository;
     private final AdAccountRepository adAccountRepository;
     private final UserRepository userRepository;
+    private final JdbcTemplate jdbcTemplate;
 
     public CampaignService(CampaignRepository campaignRepository,
                            CampaignAccessRepository campaignAccessRepository,
                            AdAccountRepository adAccountRepository,
-                           UserRepository userRepository) {
+                           UserRepository userRepository,
+                           JdbcTemplate jdbcTemplate) {
         this.campaignRepository = campaignRepository;
         this.campaignAccessRepository = campaignAccessRepository;
         this.adAccountRepository = adAccountRepository;
         this.userRepository = userRepository;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     public List<CampaignSummaryResponse> listForUser(long userId) {
@@ -42,9 +54,24 @@ public class CampaignService {
     }
 
     public CampaignDetailResponse get(long campaignId, long userId) {
+        requireAccess(userId, campaignId);
+        return buildDetail(campaignId);
+    }
+
+    /** Просмотр кампании из админ-области: без проверки владения, доступ даёт контроллер. */
+    @Transactional(readOnly = true)
+    public CampaignDetailResponse inspect(long campaignId) {
+        return buildDetail(campaignId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<DailyMetricPoint> inspectMetrics(long campaignId) {
+        return metricsOf(campaignId);
+    }
+
+    private CampaignDetailResponse buildDetail(long campaignId) {
         Campaign campaign = campaignRepository.findWithAccount(campaignId)
                 .orElseThrow(() -> new EntityNotFoundException("кампания не найдена"));
-        requireAccess(userId, campaignId);
         CampaignSummaryProjection summary = campaignRepository.findSummary(campaignId)
                 .orElseThrow(() -> new EntityNotFoundException("кампания не найдена"));
         ForecastStatsProjection stats = campaignRepository.findForecastStats(campaignId).orElse(null);
@@ -103,6 +130,24 @@ public class CampaignService {
         campaign.setStatus(request.status());
         campaignRepository.save(campaign);
         return findSummary(campaignId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<DailyMetricPoint> metrics(long campaignId, long userId) {
+        campaignRepository.findById(campaignId)
+                .orElseThrow(() -> new EntityNotFoundException("кампания не найдена"));
+        requireAccess(userId, campaignId);
+        return metricsOf(campaignId);
+    }
+
+    private List<DailyMetricPoint> metricsOf(long campaignId) {
+        return jdbcTemplate.query(METRICS_SQL, (rs, rowNum) -> new DailyMetricPoint(
+                rs.getDate("metric_date").toLocalDate(),
+                rs.getBigDecimal("cost"),
+                rs.getBigDecimal("revenue"),
+                rs.getInt("impressions"),
+                rs.getInt("clicks")
+        ), campaignId);
     }
 
     public void requireAccess(long userId, long campaignId) {

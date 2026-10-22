@@ -10,6 +10,7 @@ import by.bsuir.adforecast.repo.CampaignRepository;
 import by.bsuir.adforecast.repo.DailyMetricRepository;
 import by.bsuir.adforecast.repo.UploadRepository;
 import jakarta.persistence.EntityNotFoundException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -26,25 +27,39 @@ import java.util.Map;
 @Transactional
 public class UploadService {
 
+    private static final String HISTORY_ALL_SQL = """
+            select u.upload_id, u.campaign_id, c.campaign_name, u.file_name, u.file_format,
+                   u.period_start, u.period_end, u.uploaded_at,
+                   (select count(*) from daily_metrics m where m.upload_id = u.upload_id) as rows_count
+            from uploads u
+            join campaigns c on c.campaign_id = u.campaign_id
+            where u.campaign_id in (select campaign_id from campaign_access where user_id = ?)
+            order by u.uploaded_at desc
+            limit 100
+            """;
+
     private final CampaignRepository campaignRepository;
     private final CampaignService campaignService;
     private final UploadRepository uploadRepository;
     private final DailyMetricRepository dailyMetricRepository;
     private final StatsParser statsParser;
     private final AuditService auditService;
+    private final JdbcTemplate jdbcTemplate;
 
     public UploadService(CampaignRepository campaignRepository,
                          CampaignService campaignService,
                          UploadRepository uploadRepository,
                          DailyMetricRepository dailyMetricRepository,
                          StatsParser statsParser,
-                         AuditService auditService) {
+                         AuditService auditService,
+                         JdbcTemplate jdbcTemplate) {
         this.campaignRepository = campaignRepository;
         this.campaignService = campaignService;
         this.uploadRepository = uploadRepository;
         this.dailyMetricRepository = dailyMetricRepository;
         this.statsParser = statsParser;
         this.auditService = auditService;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     public AnalyzeResponse analyze(long campaignId, long userId, MultipartFile file) {
@@ -128,6 +143,21 @@ public class UploadService {
         return uploadRepository.findByCampaignIdOrderByIdDesc(campaignId).stream()
                 .map(upload -> UploadResponse.of(upload, dailyMetricRepository.countByUploadId(upload.getId())))
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<UploadListItem> historyAll(long userId) {
+        return jdbcTemplate.query(HISTORY_ALL_SQL, (rs, rowNum) -> new UploadListItem(
+                rs.getLong("upload_id"),
+                rs.getLong("campaign_id"),
+                rs.getString("campaign_name"),
+                rs.getString("file_name"),
+                rs.getString("file_format"),
+                rs.getDate("period_start").toLocalDate(),
+                rs.getDate("period_end").toLocalDate(),
+                rs.getTimestamp("uploaded_at").toLocalDateTime(),
+                rs.getLong("rows_count")
+        ), userId);
     }
 
     private void requireCampaignAccess(long campaignId, long userId) {

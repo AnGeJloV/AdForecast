@@ -15,7 +15,10 @@ public record CampaignSummaryResponse(
         BigDecimal totalRevenue,
         BigDecimal actualRoi,
         Long totalImpressions,
-        Long totalClicks
+        Long totalClicks,
+        BigDecimal latestForecastRoi,
+        BigDecimal latestPaybackMonths,
+        BigDecimal latestPaybackProbability
 ) {
 
     public static CampaignSummaryResponse from(CampaignSummaryProjection projection) {
@@ -32,7 +35,10 @@ public record CampaignSummaryResponse(
                 projection.getTotalRevenue(),
                 projection.getActualRoi(),
                 projection.getTotalImpressions(),
-                projection.getTotalClicks()
+                projection.getTotalClicks(),
+                projection.getLatestForecastRoi(),
+                projection.getLatestPaybackMonths(),
+                projection.getLatestPaybackProbability()
         );
     }
 }

@@ -29,4 +29,10 @@ public interface CampaignSummaryProjection {
     Long getTotalImpressions();
 
     Long getTotalClicks();
+
+    BigDecimal getLatestForecastRoi();
+
+    BigDecimal getLatestPaybackMonths();
+
+    BigDecimal getLatestPaybackProbability();
 }

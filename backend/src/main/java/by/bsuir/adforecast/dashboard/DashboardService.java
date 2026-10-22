@@ -18,6 +18,18 @@ public class DashboardService {
 
     private static final int COMPARABILITY_TOLERANCE_DAYS = 30;
 
+    private static final String CASHFLOW_SQL = """
+            select date_trunc('week', m.metric_date)::date as week_start,
+                   sum(m.cost) as cost,
+                   sum(m.revenue) as revenue
+            from daily_metrics m
+            join uploads u on u.upload_id = m.upload_id
+            where u.campaign_id in (select campaign_id from campaign_access where user_id = ?)
+            group by 1
+            order by 1 desc
+            limit ?
+            """;
+
     private static final String PLAN_FACT_SQL = """
             with latest as (
                 select distinct on (f.campaign_id) f.campaign_id, r.forecast_roi, p.horizon_days
@@ -103,6 +115,17 @@ public class DashboardService {
                 forecastsTotal, forecastsCompleted,
                 planVsFact, planVsFactAvgDeviation
         );
+    }
+
+    @Transactional(readOnly = true)
+    public List<CashflowPoint> cashflow(long userId, int weeks) {
+        int limit = Math.min(Math.max(weeks, 1), 52);
+        List<CashflowPoint> points = jdbcTemplate.query(CASHFLOW_SQL, (rs, rowNum) -> new CashflowPoint(
+                rs.getDate("week_start").toLocalDate(),
+                rs.getBigDecimal("cost"),
+                rs.getBigDecimal("revenue")
+        ), userId, limit);
+        return points.reversed();
     }
 
     private List<DashboardResponse.PlanFactRow> planVsFact(long userId) {

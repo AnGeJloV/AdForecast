@@ -15,8 +15,12 @@ public final class Queries {
                    v.total_revenue as totalRevenue,
                    v.actual_roi as actualRoi,
                    v.total_impressions as totalImpressions,
-                   v.total_clicks as totalClicks
+                   v.total_clicks as totalClicks,
+                   fs.latest_forecast_roi as latestForecastRoi,
+                   fs.latest_payback_months as latestPaybackMonths,
+                   fs.latest_payback_probability as latestPaybackProbability
             from v_campaign_summary v
+            left join v_forecast_stats fs on fs.campaign_id = v.campaign_id
             """;
 
     public static final String FORECAST_STATS_SELECT = """

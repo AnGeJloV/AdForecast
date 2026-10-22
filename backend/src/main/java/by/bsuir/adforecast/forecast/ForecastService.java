@@ -20,6 +20,7 @@ import by.bsuir.adforecast.repo.ForecastRepository;
 import by.bsuir.adforecast.repo.ForecastResultRepository;
 import by.bsuir.adforecast.repo.MlModelRepository;
 import jakarta.persistence.EntityNotFoundException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +40,20 @@ public class ForecastService {
     private static final String MODEL_NAME = "adforecast_roi";
     private static final double DAYS_PER_MONTH = 30.44;
 
+    private static final String LIST_ALL_SQL = """
+            select f.forecast_id, f.campaign_id, c.campaign_name, f.started_at, f.status,
+                   m.model_version, p.horizon_days, r.forecast_roi, r.payback_months,
+                   r.payback_probability, r.mape
+            from forecasts f
+            join campaigns c on c.campaign_id = f.campaign_id
+            join ml_models m on m.model_id = f.model_id
+            left join forecast_params p on p.forecast_id = f.forecast_id
+            left join forecast_results r on r.forecast_id = f.forecast_id
+            where f.campaign_id in (select campaign_id from campaign_access where user_id = ?)
+            order by f.started_at desc
+            limit 200
+            """;
+
     private final CampaignRepository campaignRepository;
     private final CampaignService campaignService;
     private final AdAccountRepository adAccountRepository;
@@ -47,6 +62,7 @@ public class ForecastService {
     private final ForecastResultRepository forecastResultRepository;
     private final MlModelRepository mlModelRepository;
     private final MlServiceClient mlServiceClient;
+    private final JdbcTemplate jdbcTemplate;
 
     public ForecastService(CampaignRepository campaignRepository,
                            CampaignService campaignService,
@@ -55,7 +71,8 @@ public class ForecastService {
                            ForecastParamRepository forecastParamRepository,
                            ForecastResultRepository forecastResultRepository,
                            MlModelRepository mlModelRepository,
-                           MlServiceClient mlServiceClient) {
+                           MlServiceClient mlServiceClient,
+                           JdbcTemplate jdbcTemplate) {
         this.campaignRepository = campaignRepository;
         this.campaignService = campaignService;
         this.adAccountRepository = adAccountRepository;
@@ -64,6 +81,7 @@ public class ForecastService {
         this.forecastResultRepository = forecastResultRepository;
         this.mlModelRepository = mlModelRepository;
         this.mlServiceClient = mlServiceClient;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     public ForecastResponse run(long campaignId, long userId, ForecastRequest request) {
@@ -138,6 +156,18 @@ public class ForecastService {
         campaignRepository.findById(campaignId)
                 .orElseThrow(() -> new EntityNotFoundException("кампания не найдена"));
         campaignService.requireAccess(userId, campaignId);
+        return historyOf(campaignId);
+    }
+
+    /** История прогнозов для админского просмотра: без проверки владения, доступ даёт контроллер. */
+    @Transactional(readOnly = true)
+    public List<ForecastResponse> historyForInspection(long campaignId) {
+        campaignRepository.findById(campaignId)
+                .orElseThrow(() -> new EntityNotFoundException("кампания не найдена"));
+        return historyOf(campaignId);
+    }
+
+    private List<ForecastResponse> historyOf(long campaignId) {
         return forecastRepository.findByCampaignIdOrderByStartedAtDesc(campaignId).stream()
                 .map(forecast -> {
                     ForecastParam param = forecastParamRepository.findByForecastId(forecast.getId()).orElse(null);
@@ -145,6 +175,23 @@ public class ForecastService {
                     return toHistoryItem(forecast, param, result);
                 })
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ForecastListItem> listAll(long userId) {
+        return jdbcTemplate.query(LIST_ALL_SQL, (rs, rowNum) -> new ForecastListItem(
+                rs.getLong("forecast_id"),
+                rs.getLong("campaign_id"),
+                rs.getString("campaign_name"),
+                rs.getTimestamp("started_at").toLocalDateTime(),
+                rs.getString("status"),
+                rs.getString("model_version"),
+                rs.getObject("horizon_days", Integer.class),
+                rs.getBigDecimal("forecast_roi"),
+                rs.getBigDecimal("payback_months"),
+                rs.getBigDecimal("payback_probability"),
+                rs.getBigDecimal("mape")
+        ), userId);
     }
 
     public List<CompareResponse> compare(CompareRequest request) {

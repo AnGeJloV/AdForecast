@@ -41,6 +41,12 @@ public class ForecastController {
         return forecastService.history(campaignId, principal.userId());
     }
 
+    @GetMapping("/api/forecasts")
+    public List<ForecastListItem> listAll(Authentication authentication) {
+        AuthPrincipal principal = (AuthPrincipal) authentication.getPrincipal();
+        return forecastService.listAll(principal.userId());
+    }
+
     @PostMapping("/api/forecasts/compare")
     @PreAuthorize("hasAuthority('forecast.run')")
     public List<CompareResponse> compare(@Valid @RequestBody CompareRequest request) {
