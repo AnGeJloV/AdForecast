@@ -15,9 +15,6 @@ import static by.bsuir.adforecast.repo.Queries.FORECAST_STATS_SELECT;
 
 public interface CampaignRepository extends JpaRepository<Campaign, Long> {
 
-    @Query(value = CAMPAIGN_SUMMARY_SELECT + " order by v.campaign_id desc", nativeQuery = true)
-    List<CampaignSummaryProjection> findAllSummaries();
-
     @Query(value = CAMPAIGN_SUMMARY_SELECT + """
             where v.campaign_id in (select campaign_id from campaign_access where user_id = :userId)
             order by v.campaign_id desc

@@ -66,4 +66,5 @@ def model_metrics(meta: dict) -> dict:
         "holdout_size": meta["holdout_size"],
         "ensemble_size": meta["ensemble_size"],
         "features": FEATURES,
+        "dataset_snapshot": meta.get("dataset_snapshot"),
     }

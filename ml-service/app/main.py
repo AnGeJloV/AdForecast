@@ -22,7 +22,8 @@ def create_app() -> FastAPI:
     @app.post("/train", status_code=202)
     def train(request: schemas.TrainRequest) -> schemas.TrainAcceptedResponse:
         records = [record.model_dump() for record in request.records]
-        task_id = service.submit_training(records, request.ensemble_size, request.holdout_fraction)
+        snapshot = None if request.dataset_snapshot is None else request.dataset_snapshot.model_dump()
+        task_id = service.submit_training(records, request.ensemble_size, request.holdout_fraction, snapshot)
         return schemas.TrainAcceptedResponse(task_id=task_id, status="RUNNING")
 
     @app.get("/train/{task_id}")

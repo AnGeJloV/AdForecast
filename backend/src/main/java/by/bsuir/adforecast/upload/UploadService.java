@@ -1,5 +1,6 @@
 package by.bsuir.adforecast.upload;
 
+import by.bsuir.adforecast.audit.AuditService;
 import by.bsuir.adforecast.campaign.CampaignService;
 import by.bsuir.adforecast.domain.Campaign;
 import by.bsuir.adforecast.domain.DailyMetric;
@@ -19,6 +20,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @Transactional
@@ -29,25 +31,47 @@ public class UploadService {
     private final UploadRepository uploadRepository;
     private final DailyMetricRepository dailyMetricRepository;
     private final StatsParser statsParser;
+    private final AuditService auditService;
 
     public UploadService(CampaignRepository campaignRepository,
                          CampaignService campaignService,
                          UploadRepository uploadRepository,
                          DailyMetricRepository dailyMetricRepository,
-                         StatsParser statsParser) {
+                         StatsParser statsParser,
+                         AuditService auditService) {
         this.campaignRepository = campaignRepository;
         this.campaignService = campaignService;
         this.uploadRepository = uploadRepository;
         this.dailyMetricRepository = dailyMetricRepository;
         this.statsParser = statsParser;
+        this.auditService = auditService;
     }
 
-    public UploadResponse upload(long campaignId, boolean admin, long userId, MultipartFile file) {
+    public AnalyzeResponse analyze(long campaignId, long userId, MultipartFile file) {
+        requireCampaignAccess(campaignId, userId);
+        if (file.isEmpty()) {
+            throw new UploadException(List.of("файл пуст"));
+        }
+        try {
+            UploadFormat format = statsParser.detectFormat(file);
+            AnalyzeResponse analysis = statsParser.analyze(format, file.getInputStream());
+            if (analysis.periodStart() != null
+                    && dailyMetricRepository.existsInPeriod(campaignId, analysis.periodStart(), analysis.periodEnd())) {
+                List<String> warnings = new ArrayList<>(analysis.warnings());
+                warnings.add("период выгрузки пересекается с ранее загруженными данными кампании");
+                return withWarnings(analysis, warnings);
+            }
+            return analysis;
+        } catch (IOException exception) {
+            throw new UploadException(List.of("не удалось прочитать файл"));
+        }
+    }
+
+    public UploadResponse upload(long campaignId, long userId, MultipartFile file,
+                                 Map<String, Integer> mapping) {
         Campaign campaign = campaignRepository.findById(campaignId)
                 .orElseThrow(() -> new EntityNotFoundException("кампания не найдена"));
-        if (!admin) {
-            campaignService.requireAccess(userId, campaignId);
-        }
+        campaignService.requireAccess(userId, campaignId);
         if (file.isEmpty()) {
             throw new UploadException(List.of("файл пуст"));
         }
@@ -55,7 +79,7 @@ public class UploadService {
         ParsedRows parsed;
         try {
             format = statsParser.detectFormat(file);
-            parsed = statsParser.parse(format, file.getInputStream());
+            parsed = statsParser.parse(format, file.getInputStream(), mapping);
         } catch (IOException exception) {
             throw new UploadException(List.of("не удалось прочитать файл"));
         }
@@ -93,13 +117,30 @@ public class UploadService {
             metrics.add(metric);
         }
         dailyMetricRepository.saveAll(metrics);
+        auditService.record(userId, "загрузка показателей", "кампания", campaignId,
+                "файл " + upload.getFileName() + ", строк " + metrics.size());
         return UploadResponse.of(upload, metrics.size());
     }
 
-    public List<UploadResponse> history(long campaignId) {
+    @Transactional(readOnly = true)
+    public List<UploadResponse> history(long campaignId, long userId) {
+        requireCampaignAccess(campaignId, userId);
         return uploadRepository.findByCampaignIdOrderByIdDesc(campaignId).stream()
                 .map(upload -> UploadResponse.of(upload, dailyMetricRepository.countByUploadId(upload.getId())))
                 .toList();
+    }
+
+    private void requireCampaignAccess(long campaignId, long userId) {
+        campaignRepository.findById(campaignId)
+                .orElseThrow(() -> new EntityNotFoundException("кампания не найдена"));
+        campaignService.requireAccess(userId, campaignId);
+    }
+
+    private AnalyzeResponse withWarnings(AnalyzeResponse analysis, List<String> warnings) {
+        return new AnalyzeResponse(
+                analysis.format(), analysis.delimiter(), analysis.charset(), analysis.dateFormat(),
+                analysis.columns(), analysis.previewRows(), analysis.rowCount(),
+                analysis.periodStart(), analysis.periodEnd(), warnings, analysis.errors());
     }
 
     private String resolveFileName(MultipartFile file, UploadFormat format) {

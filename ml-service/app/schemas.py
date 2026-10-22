@@ -6,13 +6,20 @@ class TrainRecord(BaseModel):
     budget: float = Field(gt=0)
     duration_days: int = Field(gt=0, le=365)
     start_month: int = Field(ge=1, le=12)
-    payback_ratio: float = Field(gt=0)
+    payback_ratio: float = Field(ge=0)
+
+
+class DatasetSnapshot(BaseModel):
+    campaign_ids: list[int]
+    rule: str
+    hash: str
 
 
 class TrainRequest(BaseModel):
     records: list[TrainRecord] = Field(min_length=50)
     ensemble_size: int = Field(default=10, ge=2, le=50)
     holdout_fraction: float = Field(default=0.2, gt=0, lt=0.5)
+    dataset_snapshot: DatasetSnapshot | None = None
 
 
 class TrainAcceptedResponse(BaseModel):
@@ -29,6 +36,7 @@ class ModelMetrics(BaseModel):
     holdout_size: int
     ensemble_size: int
     features: list[str]
+    dataset_snapshot: DatasetSnapshot | None = None
 
 
 class TrainStatusResponse(BaseModel):

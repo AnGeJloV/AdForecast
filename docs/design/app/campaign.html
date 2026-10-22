@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AdForecast — Осенняя распродажа</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --accent: #F59E0B; --accent-strong: #D97706;
+    --ok: #34D399; --warn: #FBBF24; --bad: #F87171;
+    --bg: #0A0A0B; --card: rgba(255,255,255,0.04);
+    --line: rgba(255,255,255,0.09); --text: #F5F5F4; --muted: rgba(255,255,255,0.55);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
+  h1, h2, .num { font-family: 'Plus Jakarta Sans', sans-serif; }
+
+  nav {
+    position: sticky; top: 14px; z-index: 50;
+    display: flex; align-items: center; justify-content: space-between;
+    margin: 14px 26px 0; padding: 10px 14px 10px 24px;
+    border-radius: 999px; border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(17,17,15,0.72); backdrop-filter: blur(16px);
+    box-shadow: 0 14px 44px rgba(0,0,0,0.4);
+  }
+  .nav-left { display: flex; align-items: center; gap: 30px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 700; font-size: 16.5px; text-decoration: none; color: inherit; }
+  .nav-links { display: flex; align-items: center; gap: 2px; }
+  .nav-links a { font-size: 13.5px; font-weight: 500; color: var(--muted); text-decoration: none; padding: 8px 15px; border-radius: 999px; transition: all .15s; }
+  .nav-links a:hover { color: #fff; background: rgba(255,255,255,0.05); }
+  .nav-links a.active { background: var(--accent); color: #14100a; font-weight: 600; }
+  .nav-right { display: flex; align-items: center; gap: 12px; }
+  .bell { position: relative; width: 38px; height: 38px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--muted); cursor: pointer; font-size: 15px; }
+  .bell .dot { position: absolute; top: 8px; right: 9px; width: 7px; height: 7px; border-radius: 999px; background: var(--accent); border: 2px solid #0A0A0B; }
+  .user-chip { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+  .avatar { width: 36px; height: 36px; border-radius: 999px; background: linear-gradient(135deg, var(--accent), var(--accent-strong)); display: flex; align-items: center; justify-content: center; color: #14100a; font-weight: 700; font-size: 13px; }
+  .cta { padding: 10px 20px; border-radius: 999px; border: none; cursor: pointer; font-size: 13.5px; font-weight: 600; font-family: 'Inter', sans-serif; background: var(--accent); color: #14100a; transition: background .15s; }
+  .cta:hover { background: var(--accent-strong); }
+  .glow { position: fixed; top: -220px; left: 50%; transform: translateX(-50%); width: 900px; height: 560px; pointer-events: none; background: radial-gradient(ellipse at 50% 30%, rgba(245,158,11,0.12) 0%, transparent 68%); }
+
+  main { max-width: 1340px; margin: 0 auto; padding: 30px 44px 60px; position: relative; z-index: 1; }
+  .back { font-size: 13px; color: var(--muted); text-decoration: none; }
+  .back:hover { color: var(--accent); }
+  .page-head { display: flex; justify-content: space-between; align-items: flex-end; margin: 14px 0 22px; }
+  .page-head h1 { font-size: 30px; font-weight: 600; display: flex; align-items: center; gap: 14px; }
+  .page-head .sub { color: var(--muted); font-size: 13.5px; margin-top: 6px; }
+  .actions { display: flex; gap: 10px; }
+  .ghost-btn { padding: 10px 18px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer; font-family: 'Inter', sans-serif; transition: border-color .15s; }
+  .ghost-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .pill { display: inline-block; padding: 5px 13px; border-radius: 999px; font-size: 12.5px; font-weight: 600; }
+  .pill.ok { background: rgba(52,211,153,0.14); color: var(--ok); }
+
+  .grid { display: grid; gap: 18px; }
+  .cols { grid-template-columns: 1fr 1.65fr; align-items: start; }
+  .stack { display: flex; flex-direction: column; gap: 18px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 22px; padding: 24px; }
+  .card h2 { font-size: 16px; font-weight: 600; }
+  .card .csub { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+  .card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+
+  .budget { margin: 4px 0 12px; }
+  .budget .row { display: flex; justify-content: space-between; font-size: 12.5px; margin-bottom: 7px; }
+  .budget .row b { font-variant-numeric: tabular-nums; }
+  .budget .track { height: 7px; border-radius: 999px; background: rgba(255,255,255,0.07); overflow: hidden; }
+  .budget .fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), var(--accent-strong)); }
+  .kv { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 13.5px; }
+  .kv:last-of-type { border-bottom: none; }
+  .kv .k { color: var(--muted); }
+  .kv .v { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  .upl { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .upl:last-child { border-bottom: none; }
+  .upl .fic { width: 36px; height: 36px; border-radius: 12px; background: rgba(245,158,11,0.12); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--accent); flex-shrink: 0; }
+  .upl .main { flex: 1; min-width: 0; }
+  .upl .t { font-size: 13px; font-weight: 600; }
+  .upl .s { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .upl .st { font-size: 15px; }
+
+  svg.chart { width: 100%; height: auto; display: block; }
+  .grid-line { stroke: rgba(255,255,255,0.06); stroke-width: 1; }
+  .axis-label { fill: rgba(255,255,255,0.4); font-size: 10.5px; font-family: 'Inter', sans-serif; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); }
+  .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 5px; }
+
+  .form-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .field { flex: 1; min-width: 120px; }
+  .field label { display: block; font-size: 11.5px; color: var(--muted); margin-bottom: 6px; }
+  .field input, .field select {
+    width: 100%; background: rgba(255,255,255,0.04); border: 1px solid var(--line);
+    border-radius: 12px; padding: 11px 14px; color: var(--text); font-size: 13.5px;
+    outline: none; font-family: 'Inter', sans-serif;
+  }
+  .field input:focus, .field select:focus { border-color: var(--accent); }
+  .field select option { background: #141412; }
+
+  .result { margin-top: 18px; border: 1px solid rgba(52,211,153,0.25); background: rgba(52,211,153,0.05); border-radius: 18px; padding: 20px; }
+  .result .verdict { display: flex; align-items: center; gap: 10px; font-size: 14.5px; font-weight: 600; color: var(--ok); }
+  .result .nums { display: flex; gap: 34px; margin-top: 16px; }
+  .result .n .v { font-size: 26px; font-weight: 700; font-family: 'Plus Jakarta Sans', sans-serif; font-variant-numeric: tabular-nums; }
+  .result .n .k { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+  .result .foot { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; }
+  .result .model { font-size: 12px; color: var(--muted); }
+  .dl { display: flex; gap: 8px; }
+  .dl button { border: 1px solid var(--line); background: none; color: var(--muted); border-radius: 10px; padding: 8px 14px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: 'Inter', sans-serif; transition: all .15s; }
+  .dl button:hover { border-color: var(--accent); color: var(--accent); }
+  .prob-track { height: 6px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden; margin-top: 14px; }
+  .prob-fill { height: 100%; border-radius: 999px; background: var(--ok); width: 90%; }
+</style>
+</head>
+<body>
+
+<div class="glow"></div>
+
+<nav>
+  <div class="nav-left">
+    <a class="brand" href="dashboard.html">
+      <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><rect x="2" y="14" width="5" height="9" rx="1.5" fill="#F59E0B"/><rect x="10.5" y="8" width="5" height="15" rx="1.5" fill="#F59E0B" opacity="0.7"/><rect x="19" y="3" width="5" height="20" rx="1.5" fill="#F59E0B" opacity="0.45"/></svg>
+      AdForecast
+    </a>
+    <div class="nav-links">
+      <a href="dashboard.html">Дашборд</a><a href="campaigns.html" class="active">Кампании</a><a href="upload.html">Загрузка данных</a><a href="forecasts.html">Прогнозы</a>
+    </div>
+  </div>
+  <div class="nav-right">
+    <button class="bell" title="Уведомления">🔔<span class="dot"></span></button>
+    <div class="user-chip"><div class="avatar">СК</div><span>Ковальчук С.<br/>маркетолог</span></div>
+  </div>
+</nav>
+
+<main>
+  <a class="back" href="campaigns.html">← Все кампании</a>
+  <div class="page-head">
+    <div>
+      <h1>Осенняя распродажа <span class="pill ok">окупаема</span></h1>
+      <div class="sub">Яндекс Директ · 03.08.2026 – 31.10.2026 · создана 28.07.2026</div>
+    </div>
+    <div class="actions">
+      <button class="ghost-btn">Редактировать</button>
+      <button class="ghost-btn" onclick="location.href='upload.html'">Загрузить выгрузку</button>
+    </div>
+  </div>
+
+  <div class="grid cols">
+    <div class="stack">
+      <div class="card">
+        <div class="card-head"><h2>Параметры</h2></div>
+        <div class="budget">
+          <div class="row"><span style="color:var(--muted)">Израсходовано</span><b>21 633 из 25 000 BYN</b></div>
+          <div class="track"><div class="fill" style="width:87%"></div></div>
+        </div>
+        <div class="kv"><span class="k">Доход (факт)</span><span class="v">41 136 BYN</span></div>
+        <div class="kv"><span class="k">Показы</span><span class="v">636 142</span></div>
+        <div class="kv"><span class="k">Клики</span><span class="v">25 712</span></div>
+        <div class="kv"><span class="k">CTR</span><span class="v">4,0 %</span></div>
+        <div class="kv"><span class="k">Стоимость клика</span><span class="v">0,84 BYN</span></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Выгрузки</h2><span class="csub">3 файла</span></div>
+        <div class="upl">
+          <div class="fic">CSV</div>
+          <div class="main"><div class="t">scenario_profitable.csv</div><div class="s">сегодня · 90 строк</div></div>
+          <span class="st" style="color:var(--ok)">✓</span>
+        </div>
+        <div class="upl">
+          <div class="fic">CSV</div>
+          <div class="main"><div class="t">metrics_august.csv</div><div class="s">01.09.2026 · 31 строка</div></div>
+          <span class="st" style="color:var(--ok)">✓</span>
+        </div>
+        <div class="upl">
+          <div class="fic">XLS</div>
+          <div class="main"><div class="t">direct_export.xlsx</div><div class="s">03.08.2026 · отклонён: дубли дат</div></div>
+          <span class="st" style="color:var(--bad)">✕</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div class="card">
+        <div class="card-head">
+          <div><h2>Денежный поток</h2><div class="csub">накопленный доход и расход по неделям, BYN</div></div>
+          <div class="legend"><span><i style="background:var(--accent)"></i>Доход</span><span><i style="background:#6B7280"></i>Расход</span></div>
+        </div>
+        <svg class="chart" viewBox="0 0 780 300" id="chart"></svg>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div><h2>Прогноз окупаемости</h2><div class="csub">параметры можно изменить и пересчитать</div></div></div>
+        <div class="form-row">
+          <div class="field"><label>Бюджет, BYN</label><input value="25 000" /></div>
+          <div class="field"><label>Длительность, дней</label><input value="90" /></div>
+          <div class="field"><label>Месяц старта</label>
+            <select><option>Август</option><option>Сентябрь</option><option>Октябрь</option><option>Ноябрь</option></select>
+          </div>
+          <div class="field" style="flex:0 0 auto;display:flex;align-items:flex-end"><button class="cta" style="padding:11px 22px">Рассчитать</button></div>
+        </div>
+
+        <div class="result">
+          <div class="verdict">✓ Кампания окупится — прогноз положительный</div>
+          <div class="prob-track"><div class="prob-fill"></div></div>
+          <div class="nums">
+            <div class="n"><div class="v">1,90</div><div class="k">коэффициент окупаемости</div></div>
+            <div class="n"><div class="v">90 %</div><div class="k">вероятность окупаемости</div></div>
+            <div class="n"><div class="v">41 день</div><div class="k">срок окупаемости</div></div>
+          </div>
+          <div class="foot">
+            <span class="model">модель v5 · CatBoost ×10 · MAPE 7,3 % · рассчитано сегодня в 10:24</span>
+            <div class="dl"><button>Экспорт XLSX</button><button>Экспорт PDF</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+  const revenue = [2661,5589,8638,11674,14714,17916,20934,24268,27579,31008,34494,38200];
+  const cost = [1689,3380,5094,6760,8437,10097,11744,13449,15114,16788,18475,20168];
+  function draw() {
+    const W = 780, H = 300, L = 50, R = 14, T = 14, B = 30, max = 40000;
+    const x = i => L + (W - L - R) * i / 11;
+    const y = v => T + (H - T - B) * (1 - v / max);
+    const path = vals => vals.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+    let g = '';
+    for (let v = 0; v <= max; v += 10000) {
+      g += `<line class="grid-line" x1="${L}" y1="${y(v)}" x2="${W - R}" y2="${y(v)}"/>`;
+      g += `<text class="axis-label" x="${L - 8}" y="${y(v) + 4}" text-anchor="end">${v / 1000} тыс.</text>`;
+    }
+    for (let i = 0; i < 12; i += 2) g += `<text class="axis-label" x="${x(i)}" y="${H - 8}" text-anchor="middle">${i + 1} нед</text>`;
+    document.getElementById('chart').innerHTML = g +
+      `<path d="${path(cost)}" fill="none" stroke="#6B7280" stroke-width="2" stroke-dasharray="5 5"/>` +
+      `<path d="${path(revenue)}" fill="none" stroke="#F59E0B" stroke-width="2.5"/>` +
+      revenue.map((v, i) => `<circle cx="${x(i)}" cy="${y(v)}" r="3" fill="#F59E0B"/>`).join('');
+  }
+  draw();
+</script>
+</body>
+</html>

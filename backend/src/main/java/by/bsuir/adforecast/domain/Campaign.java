@@ -45,6 +45,12 @@ public class Campaign {
     @Column(nullable = false)
     private CampaignStatus status;
 
+    @Column(name = "in_training", nullable = false)
+    private Boolean inTraining;
+
+    @Column(name = "is_test", nullable = false)
+    private Boolean isTest;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 }

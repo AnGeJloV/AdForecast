@@ -1,7 +1,6 @@
 package by.bsuir.adforecast.dashboard;
 
 import by.bsuir.adforecast.security.AuthPrincipal;
-import by.bsuir.adforecast.security.Roles;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,6 +21,6 @@ public class DashboardController {
     @PreAuthorize("hasAuthority('dashboard.view')")
     public DashboardResponse dashboard(Authentication authentication) {
         AuthPrincipal principal = (AuthPrincipal) authentication.getPrincipal();
-        return dashboardService.build(Roles.isAdmin(authentication), principal.userId());
+        return dashboardService.build(principal.userId());
     }
 }

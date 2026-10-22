@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AdForecast — Загрузка данных</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --accent: #F59E0B; --accent-strong: #D97706;
+    --ok: #34D399; --warn: #FBBF24; --bad: #F87171;
+    --bg: #0A0A0B; --card: rgba(255,255,255,0.04);
+    --line: rgba(255,255,255,0.09); --text: #F5F5F4; --muted: rgba(255,255,255,0.55);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
+  h1, h2, .num { font-family: 'Plus Jakarta Sans', sans-serif; }
+
+  nav {
+    position: sticky; top: 14px; z-index: 50;
+    display: flex; align-items: center; justify-content: space-between;
+    margin: 14px 26px 0; padding: 10px 14px 10px 24px;
+    border-radius: 999px; border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(17,17,15,0.72); backdrop-filter: blur(16px);
+    box-shadow: 0 14px 44px rgba(0,0,0,0.4);
+  }
+  .nav-left { display: flex; align-items: center; gap: 30px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 700; font-size: 16.5px; text-decoration: none; color: inherit; }
+  .nav-links { display: flex; align-items: center; gap: 2px; }
+  .nav-links a { font-size: 13.5px; font-weight: 500; color: var(--muted); text-decoration: none; padding: 8px 15px; border-radius: 999px; transition: all .15s; }
+  .nav-links a:hover { color: #fff; background: rgba(255,255,255,0.05); }
+  .nav-links a.active { background: var(--accent); color: #14100a; font-weight: 600; }
+  .nav-right { display: flex; align-items: center; gap: 12px; }
+  .bell { position: relative; width: 38px; height: 38px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--muted); cursor: pointer; font-size: 15px; }
+  .bell .dot { position: absolute; top: 8px; right: 9px; width: 7px; height: 7px; border-radius: 999px; background: var(--accent); border: 2px solid #0A0A0B; }
+  .user-chip { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+  .avatar { width: 36px; height: 36px; border-radius: 999px; background: linear-gradient(135deg, var(--accent), var(--accent-strong)); display: flex; align-items: center; justify-content: center; color: #14100a; font-weight: 700; font-size: 13px; }
+  .cta { padding: 10px 20px; border-radius: 999px; border: none; cursor: pointer; font-size: 13.5px; font-weight: 600; font-family: 'Inter', sans-serif; background: var(--accent); color: #14100a; transition: background .15s; }
+  .cta:hover { background: var(--accent-strong); }
+  .glow { position: fixed; top: -220px; left: 50%; transform: translateX(-50%); width: 900px; height: 560px; pointer-events: none; background: radial-gradient(ellipse at 50% 30%, rgba(245,158,11,0.12) 0%, transparent 68%); }
+
+  main { max-width: 1340px; margin: 0 auto; padding: 30px 44px 60px; position: relative; z-index: 1; }
+  .page-head { margin-bottom: 22px; }
+  .page-head h1 { font-size: 30px; font-weight: 600; }
+  .page-head .sub { color: var(--muted); font-size: 13.5px; margin-top: 6px; }
+
+  .grid { display: grid; gap: 18px; grid-template-columns: 1.15fr 1fr; align-items: start; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 22px; padding: 24px; }
+  .card h2 { font-size: 16px; font-weight: 600; }
+  .card .csub { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+  .card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+
+  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 7px; }
+  .field select {
+    width: 100%; background: rgba(255,255,255,0.04); border: 1px solid var(--line);
+    border-radius: 12px; padding: 12px 14px; color: var(--text); font-size: 13.5px;
+    outline: none; font-family: 'Inter', sans-serif; appearance: none; cursor: pointer;
+  }
+  .field select option { background: #141412; }
+
+  .dropzone {
+    margin-top: 16px; border: 1.5px dashed rgba(255,255,255,0.2); border-radius: 20px;
+    padding: 42px 24px; text-align: center; cursor: pointer; transition: all .15s;
+  }
+  .dropzone:hover { border-color: var(--accent); background: rgba(245,158,11,0.04); }
+  .dropzone .ic {
+    width: 52px; height: 52px; margin: 0 auto 14px; border-radius: 16px;
+    background: rgba(245,158,11,0.12); display: flex; align-items: center; justify-content: center; font-size: 22px;
+  }
+  .dropzone .t { font-size: 15px; font-weight: 600; }
+  .dropzone .s { font-size: 12.5px; color: var(--muted); margin-top: 7px; line-height: 1.6; }
+  .dropzone .browse { color: var(--accent); font-weight: 600; }
+
+  .format { margin-top: 16px; border: 1px solid rgba(255,255,255,0.07); background: rgba(255,255,255,0.02); border-radius: 16px; padding: 15px 17px; }
+  .format .t { font-size: 12.5px; font-weight: 600; margin-bottom: 9px; }
+  .format code {
+    display: block; font-family: 'JetBrains Mono', Consolas, monospace; font-size: 12px;
+    color: var(--muted); line-height: 1.7;
+  }
+  .format code b { color: var(--accent); font-weight: 600; }
+  .format .hint { font-size: 11.5px; color: var(--muted); margin-top: 9px; }
+
+  .upl { border: 1px solid rgba(255,255,255,0.07); border-radius: 16px; padding: 15px 17px; margin-bottom: 10px; }
+  .upl .top { display: flex; align-items: center; gap: 12px; }
+  .upl .fic { width: 38px; height: 38px; border-radius: 12px; background: rgba(245,158,11,0.12); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--accent); flex-shrink: 0; }
+  .upl .main { flex: 1; min-width: 0; }
+  .upl .t { font-size: 13.5px; font-weight: 600; }
+  .upl .s { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .st-pill { padding: 5px 12px; border-radius: 999px; font-size: 11.5px; font-weight: 600; flex-shrink: 0; }
+  .st-pill.ok { background: rgba(52,211,153,0.14); color: var(--ok); }
+  .st-pill.bad { background: rgba(248,113,113,0.14); color: var(--bad); }
+  .errors { margin-top: 12px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 11px; }
+  .errors .e { display: flex; gap: 8px; font-size: 12px; color: var(--bad); padding: 3px 0; }
+  .errors .e span:first-child { font-variant-numeric: tabular-nums; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<div class="glow"></div>
+
+<nav>
+  <div class="nav-left">
+    <a class="brand" href="dashboard.html">
+      <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><rect x="2" y="14" width="5" height="9" rx="1.5" fill="#F59E0B"/><rect x="10.5" y="8" width="5" height="15" rx="1.5" fill="#F59E0B" opacity="0.7"/><rect x="19" y="3" width="5" height="20" rx="1.5" fill="#F59E0B" opacity="0.45"/></svg>
+      AdForecast
+    </a>
+    <div class="nav-links">
+      <a href="dashboard.html">Дашборд</a><a href="campaigns.html">Кампании</a><a href="upload.html" class="active">Загрузка данных</a><a href="forecasts.html">Прогнозы</a>
+    </div>
+  </div>
+  <div class="nav-right">
+    <button class="bell" title="Уведомления">🔔<span class="dot"></span></button>
+    <div class="user-chip"><div class="avatar">СК</div><span>Ковальчук С.<br/>маркетолог</span></div>
+  </div>
+</nav>
+
+<main>
+  <div class="page-head">
+    <h1>Загрузка данных</h1>
+    <div class="sub">Выгрузки из рекламных кабинетов — на их основе строятся денежные потоки кампаний</div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="card-head"><h2>Новая выгрузка</h2></div>
+      <div class="field">
+        <label>Кампания</label>
+        <select>
+          <option>Осенняя распродажа</option>
+          <option>Лидогенерация B2B</option>
+          <option>Ретаргетинг корзины</option>
+          <option>Промо новинки</option>
+        </select>
+      </div>
+      <div class="dropzone">
+        <div class="ic">⬆</div>
+        <div class="t">Перетащите файл сюда</div>
+        <div class="s">или <span class="browse">выберите на компьютере</span><br/>CSV или XLSX, до 10 МБ</div>
+      </div>
+      <div class="format">
+        <div class="t">Формат файла</div>
+        <code>
+          <b>date, impressions, clicks, cost, revenue</b><br/>
+          2026-08-03, 7301, 298, 239.10, 266.56<br/>
+          2026-08-04, 6996, 298, 239.32, 297.26
+        </code>
+        <div class="hint">Одна строка — один день. Даты внутри кампании не должны повторяться, периоды выгрузок не должны пересекаться.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><div><h2>История загрузок</h2><div class="csub">по всем кампаниям</div></div></div>
+
+      <div class="upl">
+        <div class="top">
+          <div class="fic">CSV</div>
+          <div class="main"><div class="t">scenario_profitable.csv</div><div class="s">Осенняя распродажа · сегодня, 10:18 · 90 строк</div></div>
+          <span class="st-pill ok">принят</span>
+        </div>
+      </div>
+
+      <div class="upl">
+        <div class="top">
+          <div class="fic">CSV</div>
+          <div class="main"><div class="t">scenario_fatigue.csv</div><div class="s">Лидогенерация B2B · вчера, 15:40 · 90 строк</div></div>
+          <span class="st-pill ok">принят</span>
+        </div>
+      </div>
+
+      <div class="upl">
+        <div class="top">
+          <div class="fic">XLS</div>
+          <div class="main"><div class="t">sample_upload_1.xlsx</div><div class="s">Ретаргетинг корзины · 19.10.2026 · 58 строк</div></div>
+          <span class="st-pill ok">принят</span>
+        </div>
+      </div>
+
+      <div class="upl">
+        <div class="top">
+          <div class="fic">CSV</div>
+          <div class="main"><div class="t">scenario_unprofitable.csv</div><div class="s">Промо новинки · 18.10.2026 · 45 строк</div></div>
+          <span class="st-pill bad">отклонён</span>
+        </div>
+        <div class="errors">
+          <div class="e"><span>строка 12</span><span>— дата 32.09.2026 не существует</span></div>
+          <div class="e"><span>строка 23</span><span>— отрицательное значение в колонке cost</span></div>
+          <div class="e"><span>строка 31</span><span>— дата 15.09.2026 уже загружена ранее</span></div>
+        </div>
+      </div>
+
+      <div class="upl">
+        <div class="top">
+          <div class="fic">XLS</div>
+          <div class="main"><div class="t">direct_export.xlsx</div><div class="s">Осенняя распродажа · 03.08.2026 · 31 строка</div></div>
+          <span class="st-pill bad">отклонён</span>
+        </div>
+        <div class="errors">
+          <div class="e"><span>файл</span><span>— период 03.08–02.09 пересекается с уже загруженным</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+</body>
+</html>

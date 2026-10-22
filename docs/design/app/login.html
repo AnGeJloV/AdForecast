@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AdForecast — Вход</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --accent: #F59E0B; --accent-strong: #D97706;
+    --ok: #34D399;
+    --bg: #0A0A0B; --line: rgba(255,255,255,0.09);
+    --text: #F5F5F4; --muted: rgba(255,255,255,0.55);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; min-height: 100vh; overflow: hidden; }
+  h1 { font-family: 'Plus Jakarta Sans', sans-serif; }
+
+  .bg {
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse 700px 500px at 78% 30%, rgba(245,158,11,0.26), transparent 70%),
+      radial-gradient(ellipse 600px 500px at 15% 85%, rgba(52,211,153,0.10), transparent 70%),
+      var(--bg);
+  }
+
+  .top {
+    position: relative; z-index: 2;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 26px 44px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 700; font-size: 17px; }
+
+  .content {
+    position: relative; z-index: 2; height: calc(100vh - 92px);
+    display: flex; flex-direction: column; justify-content: center;
+    padding-left: 8vw; max-width: 860px;
+  }
+  .content h1 { font-size: clamp(1.9rem, 3.4vw, 3.1rem); font-weight: 500; line-height: 1.15; letter-spacing: -0.02em; margin: 22px 0 16px; }
+  .content h1 span { white-space: nowrap; }
+  .content p { color: var(--muted); font-size: 15px; line-height: 1.6; max-width: 400px; }
+  .login-form { margin-top: 36px; display: flex; flex-direction: column; gap: 12px; max-width: 340px; }
+  .login-form input {
+    padding: 15px 18px; border-radius: 14px; border: 1px solid var(--line);
+    background: rgba(255,255,255,0.05); color: #fff; font-size: 14px; font-family: 'Inter', sans-serif; outline: none;
+    transition: border-color .15s;
+  }
+  .login-form input:focus { border-color: var(--accent); }
+  .cta {
+    padding: 15px; border-radius: 999px; border: none; cursor: pointer;
+    font-size: 14.5px; font-weight: 600; font-family: 'Inter', sans-serif;
+    background: var(--accent); color: #14100a; transition: background .15s, transform .12s;
+  }
+  .cta:hover { background: var(--accent-strong); transform: scale(1.02); }
+  .hint { font-size: 12.5px; color: var(--muted); margin-top: 10px; text-align: center; }
+  .hint a { color: var(--accent); text-decoration: none; font-weight: 600; margin-left: 5px; }
+  .hint a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<div class="bg"></div>
+
+<div class="top">
+  <div class="brand">
+    <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><rect x="2" y="14" width="5" height="9" rx="1.5" fill="#F59E0B"/><rect x="10.5" y="8" width="5" height="15" rx="1.5" fill="#F59E0B" opacity="0.7"/><rect x="19" y="3" width="5" height="20" rx="1.5" fill="#F59E0B" opacity="0.45"/></svg>
+    AdForecast
+  </div>
+</div>
+
+<div class="content">
+  <h1><span>Прогноз окупаемости</span><br/><span>рекламных кампаний</span></h1>
+  <p>AdForecast оценивает коэффициент окупаемости, вероятность возврата средств и срок окупаемости кампании до её запуска.</p>
+  <div class="login-form">
+    <input type="text" placeholder="Логин" value="marketer" />
+    <input type="password" placeholder="Пароль" value="••••••••" />
+    <button class="cta" onclick="location.href='dashboard.html'">Войти</button>
+    <div class="hint">нет аккаунта?<a href="register.html">Зарегистрироваться</a></div>
+  </div>
+</div>
+
+
+</body>
+</html>

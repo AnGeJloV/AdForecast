@@ -34,4 +34,7 @@ public class MlModel {
 
     @Column(name = "quality_metric")
     private BigDecimal qualityMetric;
+
+    @Column(name = "is_active", nullable = false)
+    private Boolean isActive;
 }

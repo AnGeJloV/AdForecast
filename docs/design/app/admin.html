@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AdForecast — Администрирование</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --accent: #F59E0B; --accent-strong: #D97706;
+    --ok: #34D399; --warn: #FBBF24; --bad: #F87171;
+    --bg: #0A0A0B; --card: rgba(255,255,255,0.04);
+    --line: rgba(255,255,255,0.09); --text: #F5F5F4; --muted: rgba(255,255,255,0.55);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
+  h1, h2, .num { font-family: 'Plus Jakarta Sans', sans-serif; }
+
+  /* NAV: у администратора нет бизнес-разделов */
+  nav {
+    position: sticky; top: 14px; z-index: 50;
+    display: flex; align-items: center; justify-content: space-between;
+    margin: 14px 26px 0; padding: 10px 14px 10px 24px;
+    border-radius: 999px; border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(17,17,15,0.72); backdrop-filter: blur(16px);
+    box-shadow: 0 14px 44px rgba(0,0,0,0.4);
+  }
+  .nav-left { display: flex; align-items: center; gap: 30px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 700; font-size: 16.5px; text-decoration: none; color: inherit; }
+  .nav-links { display: flex; align-items: center; gap: 2px; }
+  .nav-links a { font-size: 13.5px; font-weight: 500; color: var(--muted); text-decoration: none; padding: 8px 15px; border-radius: 999px; transition: all .15s; }
+  .nav-links a.active { background: var(--accent); color: #14100a; font-weight: 600; }
+  .nav-right { display: flex; align-items: center; gap: 12px; }
+  .bell { position: relative; width: 38px; height: 38px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--muted); cursor: pointer; font-size: 15px; }
+  .bell .dot { position: absolute; top: 8px; right: 9px; width: 7px; height: 7px; border-radius: 999px; background: var(--accent); border: 2px solid #0A0A0B; }
+  .user-chip { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+  .avatar { width: 36px; height: 36px; border-radius: 999px; background: linear-gradient(135deg, var(--accent), var(--accent-strong)); display: flex; align-items: center; justify-content: center; color: #14100a; font-weight: 700; font-size: 13px; }
+  .ghost-btn { padding: 10px 18px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer; font-family: 'Inter', sans-serif; transition: border-color .15s; }
+  .ghost-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .cta { padding: 10px 20px; border-radius: 999px; border: none; cursor: pointer; font-size: 13.5px; font-weight: 600; font-family: 'Inter', sans-serif; background: var(--accent); color: #14100a; transition: background .15s; white-space: nowrap; }
+  .cta:hover { background: var(--accent-strong); }
+  .glow { position: fixed; top: -220px; left: 50%; transform: translateX(-50%); width: 900px; height: 560px; pointer-events: none; background: radial-gradient(ellipse at 50% 30%, rgba(245,158,11,0.12) 0%, transparent 68%); }
+
+  main { max-width: 1340px; margin: 0 auto; padding: 30px 44px 60px; position: relative; z-index: 1; }
+  .page-head { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 20px; }
+  .page-head h1 { font-size: 30px; font-weight: 600; }
+  .page-head .sub { color: var(--muted); font-size: 13.5px; margin-top: 6px; }
+  .page-head .meta { font-size: 12.5px; color: var(--muted); }
+
+  /* Вкладки раздела */
+  .tabs { display: flex; gap: 6px; background: rgba(255,255,255,0.04); border: 1px solid var(--line); border-radius: 999px; padding: 4px; width: fit-content; margin-bottom: 22px; }
+  .tabs button { border: none; background: none; color: var(--muted); font-size: 13px; font-weight: 600; padding: 9px 18px; border-radius: 999px; cursor: pointer; font-family: 'Inter', sans-serif; transition: all .15s; white-space: nowrap; }
+  .tabs button:hover { color: #fff; }
+  .tabs button.active { background: var(--accent); color: #14100a; }
+  .section { display: none; }
+  .section.open { display: block; }
+
+  .grid { display: grid; gap: 18px; }
+  .kpis { grid-template-columns: repeat(4, 1fr); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 22px; padding: 22px 24px; }
+  .card h2 { font-size: 16px; font-weight: 600; }
+  .card .csub { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+  .card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .kpi .label { font-size: 12.5px; color: var(--muted); }
+  .kpi .num { font-size: 32px; font-weight: 600; margin-top: 10px; font-variant-numeric: tabular-nums; }
+  .kpi .delta { font-size: 12px; margin-top: 6px; color: var(--ok); }
+  .kpi .delta.warn { color: var(--warn); }
+  .kpi .delta.muted { color: var(--muted); }
+
+  .row-2 { grid-template-columns: 1.6fr 1fr; margin-top: 18px; }
+  .row-2 > .card { display: flex; flex-direction: column; }
+  .row-2 .donut-wrap { flex: 1; align-items: center; }
+  .row-2 svg.chart { flex: 1; min-height: 0; }
+  .donut-wrap { display: flex; align-items: center; gap: 30px; margin-top: 10px; }
+  .donut-legend { flex: 1; display: flex; flex-direction: column; gap: 12px; font-size: 13px; }
+  .donut-legend .r { display: flex; align-items: center; gap: 10px; }
+  .donut-legend .r .dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+  .donut-legend .r .n { flex: 1; color: var(--muted); }
+  .donut-legend .r .v { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); }
+  .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 5px; }
+
+  svg.chart { width: 100%; height: auto; display: block; }
+  .grid-line { stroke: rgba(255,255,255,0.06); stroke-width: 1; }
+  .axis-label { fill: rgba(255,255,255,0.4); font-size: 10.5px; font-family: 'Inter', sans-serif; }
+  .mini-row { display: flex; gap: 10px; margin-top: 14px; }
+  .mini { flex: 1; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 10px 12px; }
+  .mini .k { font-size: 11px; color: var(--muted); }
+  .mini .v { font-size: 15px; font-weight: 700; margin-top: 3px; font-variant-numeric: tabular-nums; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  td { padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,0.03); }
+  .mono { font-variant-numeric: tabular-nums; }
+  .pill { display: inline-block; padding: 4px 11px; border-radius: 999px; font-size: 11.5px; font-weight: 600; }
+  .pill.ok { background: rgba(52,211,153,0.14); color: var(--ok); }
+  .pill.bad { background: rgba(248,113,113,0.14); color: var(--bad); }
+  .pill.admin { background: rgba(245,158,11,0.14); color: var(--accent); }
+  .pill.mark { background: rgba(255,255,255,0.07); color: var(--muted); }
+  .pill.cur { background: rgba(52,211,153,0.14); color: var(--ok); }
+  .link { font-size: 12.5px; color: var(--accent); text-decoration: none; font-weight: 600; cursor: pointer; background: none; border: none; font-family: 'Inter', sans-serif; }
+  .link:hover { text-decoration: underline; }
+
+  .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
+  .fchips { display: flex; gap: 6px; }
+  .fchip { border: 1px solid var(--line); background: none; color: var(--muted); font-size: 12px; font-weight: 600; padding: 7px 13px; border-radius: 999px; cursor: pointer; font-family: 'Inter', sans-serif; transition: all .15s; }
+  .fchip.active { background: rgba(245,158,11,0.14); border-color: rgba(245,158,11,0.4); color: var(--accent); }
+  .spacer { flex: 1; }
+  .search { background: rgba(255,255,255,0.04); border: 1px solid var(--line); border-radius: 999px; padding: 8px 15px; color: var(--text); font-size: 12.5px; width: 200px; outline: none; font-family: 'Inter', sans-serif; }
+  .search:focus { border-color: var(--accent); }
+
+  .u { display: flex; align-items: center; gap: 12px; }
+  .u .avatar { width: 36px; height: 36px; font-size: 12px; }
+  .u .n { font-weight: 600; font-size: 13px; }
+  .u .l { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .row-actions { display: flex; gap: 7px; }
+  .row-actions button { border: 1px solid var(--line); background: none; color: var(--muted); border-radius: 9px; padding: 7px 12px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: 'Inter', sans-serif; transition: all .15s; }
+  .row-actions button:hover { border-color: var(--accent); color: var(--accent); }
+  .row-actions button.danger:hover { border-color: var(--bad); color: var(--bad); }
+  .row-actions button:disabled { opacity: .35; cursor: default; }
+  .row-actions button:disabled:hover { border-color: var(--line); color: var(--muted); }
+
+  .note-card { border: 1px solid rgba(245,158,11,0.25); background: rgba(245,158,11,0.05); border-radius: 16px; padding: 14px 17px; font-size: 12.5px; color: var(--muted); display: flex; gap: 10px; align-items: center; margin-top: 16px; }
+  .note-card b { color: var(--text); }
+
+  .danger-zone { border: 1px solid rgba(248,113,113,0.3); background: rgba(248,113,113,0.04); border-radius: 18px; padding: 20px; margin-top: 16px; }
+  .danger-zone .t { font-size: 14px; font-weight: 600; color: var(--bad); }
+  .danger-zone .s { font-size: 12.5px; color: var(--muted); margin-top: 5px; line-height: 1.55; }
+  .danger-zone button { margin-top: 13px; padding: 10px 18px; border-radius: 999px; border: 1px solid rgba(248,113,113,0.5); background: none; color: var(--bad); font-size: 13px; font-weight: 600; cursor: pointer; font-family: 'Inter', sans-serif; }
+
+  .modal-overlay { display: none; position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); align-items: center; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { width: 420px; background: #141412; border: 1px solid rgba(255,255,255,0.12); border-radius: 24px; padding: 28px; }
+  .modal h2 { font-size: 19px; font-weight: 600; }
+  .modal .csub { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+  .modal .form { margin-top: 20px; display: flex; flex-direction: column; gap: 13px; }
+  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 7px; }
+  .field input, .field select { width: 100%; background: rgba(255,255,255,0.04); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; color: var(--text); font-size: 13.5px; outline: none; font-family: 'Inter', sans-serif; }
+  .field input:focus, .field select:focus { border-color: var(--accent); }
+  .field select option { background: #141412; }
+  .modal .foot { display: flex; gap: 10px; margin-top: 22px; }
+  .modal .ghost-btn, .modal .cta { flex: 1; padding: 12px; border-radius: 12px; }
+
+  /* Состав обучающей выборки */
+  .pill.warnn { background: rgba(251,191,36,0.14); color: var(--warn); }
+  .summary { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+  .sum-item { flex: 1; min-width: 150px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 13px 16px; }
+  .sum-item .k { font-size: 11.5px; color: var(--muted); }
+  .sum-item .v { font-size: 19px; font-weight: 700; margin-top: 5px; font-variant-numeric: tabular-nums; }
+  .sum-item .v span { font-size: 12px; font-weight: 500; color: var(--muted); }
+  .chk { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+  tbody tr.included-excluded td { opacity: .45; }
+  tbody tr.included-excluded .tag-keep { opacity: 1; }
+  .modal.wide { width: min(1120px, 94vw); max-height: 88vh; overflow-y: auto; }
+  .modal-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 18px; }
+  .modal-head h2 { font-size: 20px; font-weight: 600; }
+  .close-x { width: 36px; height: 36px; border-radius: 999px; border: 1px solid var(--line); background: none; color: var(--muted); font-size: 14px; cursor: pointer; flex-shrink: 0; font-family: 'Inter', sans-serif; }
+  .close-x:hover { border-color: var(--accent); color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="glow"></div>
+
+<nav>
+  <div class="nav-left">
+    <a class="brand" href="admin.html">
+      <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><rect x="2" y="14" width="5" height="9" rx="1.5" fill="#F59E0B"/><rect x="10.5" y="8" width="5" height="15" rx="1.5" fill="#F59E0B" opacity="0.7"/><rect x="19" y="3" width="5" height="20" rx="1.5" fill="#F59E0B" opacity="0.45"/></svg>
+      AdForecast
+    </a>
+    <div class="nav-links">
+      <a href="admin.html" class="active">Администрирование</a>
+    </div>
+  </div>
+  <div class="nav-right">
+    <button class="bell" title="Уведомления">🔔<span class="dot"></span></button>
+    <div class="user-chip"><div class="avatar">КС</div><span>Ковальчук С.<br/>администратор</span></div>
+    <button class="ghost-btn" onclick="location.href='login.html'">Выйти</button>
+  </div>
+</nav>
+
+<main>
+  <div class="page-head">
+    <div>
+      <h1>Администрирование</h1>
+      <div class="sub">Сводка по программному средству, пользователи и контроль действий</div>
+    </div>
+    <span class="meta">обновлено сегодня в 10:26</span>
+  </div>
+
+  <div class="tabs">
+    <button class="active" onclick="showTab(this,'summary')">Сводка</button>
+    <button onclick="showTab(this,'users')">Пользователи</button>
+    <button onclick="showTab(this,'audit')">Журнал действий</button>
+    <button onclick="showTab(this,'models')">Модели и обучение</button>
+    <button onclick="showTab(this,'backup')">Резервные копии</button>
+  </div>
+
+  <!-- ===================== СВОДКА ===================== -->
+  <div class="section open" id="summary">
+    <div class="grid kpis">
+      <div class="card kpi"><div class="label">Пользователи</div><div class="num">4</div><div class="delta">3 активных · 1 заблокирован · +1 за месяц</div></div>
+      <div class="card kpi"><div class="label">Кампании в системе</div><div class="num">820</div><div class="delta">12 активных · 8 планируемых · 800 завершённых</div></div>
+      <div class="card kpi"><div class="label">Прогнозов за 30 дней</div><div class="num">31</div><div class="delta warn">27 успешных · 4 с ошибкой</div></div>
+      <div class="card kpi"><div class="label">Отчётов выгружено</div><div class="num">25</div><div class="delta">18 XLSX · 7 PDF за месяц</div></div>
+    </div>
+
+    <div class="grid row-2">
+      <div class="card">
+        <div class="card-head">
+          <div><h2>Активность пользователей</h2><div class="csub" id="activityPeriod">распределение действий по типам</div></div>
+          <div class="fchips">
+            <button class="fchip" onclick="renderActivity(1, this)">День</button>
+            <button class="fchip active" onclick="renderActivity(7, this)">Неделя</button>
+            <button class="fchip" onclick="renderActivity(30, this)">Месяц</button>
+            <button class="fchip" onclick="renderActivity('all', this)">Всё время</button>
+          </div>
+        </div>
+        <div class="donut-wrap">
+          <svg width="190" height="190" viewBox="0 0 42 42" id="activityDonut"></svg>
+          <div class="donut-legend" id="activityLegend"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <div><h2>Точность прогнозов</h2><div class="csub">ошибка прогноза против факта по закрытым кампаниям — чем ниже, тем лучше</div></div>
+          <span class="pill ok">MAPE 7,8 %</span>
+        </div>
+        <svg class="chart" viewBox="0 0 470 230" id="accuracy"></svg>
+        <div class="mini-row">
+          <div class="mini"><div class="k">август</div><div class="v">9,4 %</div></div>
+          <div class="mini"><div class="k">сентябрь</div><div class="v">8,6 %</div></div>
+          <div class="mini"><div class="k">октябрь</div><div class="v">7,8 %</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <div class="card-head">
+        <div><h2>Последние действия</h2><div class="csub">неизменяемый журнал, записи хранятся 12 месяцев</div></div>
+        <button class="link" onclick="showTab(document.querySelectorAll('.tabs button')[2],'audit')">Весь журнал →</button>
+      </div>
+      <table>
+        <thead><tr><th>Время</th><th>Пользователь</th><th>Действие</th><th>Объект</th><th>IP</th><th>Результат</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">21.10, 10:24</td><td>Марина Петрова</td><td>запуск прогноза</td><td>Осенняя распродажа</td><td class="mono">192.168.1.34</td><td><span class="pill ok">успех</span></td></tr>
+          <tr><td class="mono">21.10, 10:18</td><td>Марина Петрова</td><td>загрузка выгрузки</td><td>scenario_profitable.csv</td><td class="mono">192.168.1.34</td><td><span class="pill ok">успех</span></td></tr>
+          <tr><td class="mono">21.10, 09:41</td><td>Ковальчук С.</td><td>вход в систему</td><td>—</td><td class="mono">10.0.0.5</td><td><span class="pill ok">успех</span></td></tr>
+          <tr><td class="mono">20.10, 17:02</td><td>Ковальчук С.</td><td>блокировка пользователя</td><td>Анна Козлова</td><td class="mono">10.0.0.5</td><td><span class="pill ok">успех</span></td></tr>
+          <tr><td class="mono">20.10, 12:03</td><td>система</td><td>обучение модели</td><td>версия v5</td><td class="mono">—</td><td><span class="pill ok">успех</span></td></tr>
+          <tr><td class="mono">19.10, 12:05</td><td>Дмитрий Сидоров</td><td>запуск прогноза</td><td>Новогодние подарки</td><td class="mono">192.168.1.51</td><td><span class="pill bad">ошибка</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ===================== ПОЛЬЗОВАТЕЛИ ===================== -->
+  <div class="section" id="users">
+    <div class="toolbar">
+      <div class="fchips">
+        <button class="fchip active">Все · 4</button>
+        <button class="fchip">Маркетологи · 3</button>
+        <button class="fchip">Администраторы · 1</button>
+        <button class="fchip">Заблокированные · 1</button>
+      </div>
+      <div class="spacer"></div>
+      <input class="search" placeholder="Поиск по имени или логину…" />
+      <button class="cta" onclick="document.getElementById('modal').classList.add('open')">＋ Пользователь</button>
+    </div>
+    <div class="card" style="padding:10px 24px 18px">
+      <table>
+        <thead><tr><th>Пользователь</th><th>E-mail</th><th>Роль</th><th>Последний вход</th><th>Статус</th><th></th></tr></thead>
+        <tbody>
+          <tr>
+            <td><div class="u"><div class="avatar">КС</div><div><div class="n">Ковальчук Станислав</div><div class="l">admin</div></div></div></td>
+            <td>admin@adforecast.by</td><td><span class="pill admin">администратор</span></td>
+            <td class="mono">сегодня, 09:41</td><td><span class="pill ok">активен</span></td>
+            <td><div class="row-actions"><button>Изменить</button></div></td>
+          </tr>
+          <tr>
+            <td><div class="u"><div class="avatar" style="background:linear-gradient(135deg,#34D399,#059669)">МП</div><div><div class="n">Марина Петрова</div><div class="l">marketer</div></div></div></td>
+            <td>petrova@adforecast.by</td><td><span class="pill mark">маркетолог</span></td>
+            <td class="mono">сегодня, 10:12</td><td><span class="pill ok">активен</span></td>
+            <td><div class="row-actions"><button>Изменить</button><button class="danger">Заблокировать</button></div></td>
+          </tr>
+          <tr>
+            <td><div class="u"><div class="avatar" style="background:linear-gradient(135deg,#60A5FA,#2563EB)">ДС</div><div><div class="n">Дмитрий Сидоров</div><div class="l">dsidorov</div></div></div></td>
+            <td>sidorov@adforecast.by</td><td><span class="pill mark">маркетолог</span></td>
+            <td class="mono">вчера, 17:25</td><td><span class="pill ok">активен</span></td>
+            <td><div class="row-actions"><button>Изменить</button><button class="danger">Заблокировать</button></div></td>
+          </tr>
+          <tr>
+            <td><div class="u"><div class="avatar" style="background:linear-gradient(135deg,#A78BFA,#7C3AED)">АК</div><div><div class="n">Анна Козлова</div><div class="l">akozlova</div></div></div></td>
+            <td>kozlova@adforecast.by</td><td><span class="pill mark">маркетолог</span></td>
+            <td class="mono">12.10.2026</td><td><span class="pill bad">заблокирована</span></td>
+            <td><div class="row-actions"><button>Изменить</button><button>Разблокировать</button></div></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ===================== ЖУРНАЛ ДЕЙСТВИЙ ===================== -->
+  <div class="section" id="audit">
+    <div class="toolbar">
+      <div class="fchips">
+        <button class="fchip active">Все</button>
+        <button class="fchip">Входы и выходы</button>
+        <button class="fchip">Данные</button>
+        <button class="fchip">Прогнозы</button>
+        <button class="fchip">Администрирование</button>
+        <button class="fchip">Ошибки</button>
+      </div>
+      <div class="spacer"></div>
+      <input class="search" placeholder="Поиск по пользователю или объекту…" />
+    </div>
+    <div class="card" style="padding:10px 24px 18px">
+      <table>
+        <thead><tr><th>Время</th><th>Пользователь</th><th>Действие</th><th>Объект</th><th>IP</th><th>Результат</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">21.10, 10:24</td><td>Марина Петрова</td><td>запуск прогноза</td><td>Осенняя распродажа</td><td class="mono">192.168.1.34</td><td><span class="pill ok">успех</span></td></tr>
+          <tr><td class="mono">21.10, 10:18</td><td>Марина Петрова</td><td>загрузка выгрузки</td><td>scenario_profitable.csv</td><td class="mono">192.168.1.34</td><td><span class="pill ok">успех</span></td></tr>
+          <tr><td class="mono">21.10, 09:41</td><td>Ковальчук С.</td><td>вход в систему</td><td>—</td><td class="mono">10.0.0.5</td><td><span class="pill ok">успех</span></td></tr>
+          <tr><td class="mono">21.10, 08:57</td><td>Дмитрий Сидоров</td><td>вход в систему</td><td>—</td><td class="mono">192.168.1.51</td><td><span class="pill bad">неверный пароль ×3</span></td></tr>
+          <tr><td class="mono">20.10, 17:02</td><td>Ковальчук С.</td><td>блокировка пользователя</td><td>Анна Козлова</td><td class="mono">10.0.0.5</td><td><span class="pill ok">успех</span></td></tr>
+          <tr><td class="mono">20.10, 16:40</td><td>Ковальчук С.</td><td>создание пользователя</td><td>Дмитрий Сидоров</td><td class="mono">10.0.0.5</td><td><span class="pill ok">успех</span></td></tr>
+          <tr><td class="mono">20.10, 16:02</td><td>Марина Петрова</td><td>запуск прогноза</td><td>Лидогенерация B2B</td><td class="mono">192.168.1.34</td><td><span class="pill ok">успех</span></td></tr>
+          <tr><td class="mono">20.10, 15:30</td><td>Дмитрий Сидоров</td><td>экспорт отчёта</td><td>PDF · Промо новинки</td><td class="mono">192.168.1.51</td><td><span class="pill ok">успех</span></td></tr>
+          <tr><td class="mono">20.10, 12:03</td><td>система</td><td>обучение модели</td><td>версия v5</td><td class="mono">—</td><td><span class="pill ok">успех</span></td></tr>
+          <tr><td class="mono">19.10, 18:20</td><td>Дмитрий Сидоров</td><td>экспорт отчёта</td><td>XLSX · Лидогенерация B2B</td><td class="mono">192.168.1.51</td><td><span class="pill ok">успех</span></td></tr>
+          <tr><td class="mono">19.10, 12:05</td><td>Дмитрий Сидоров</td><td>запуск прогноза</td><td>Новогодние подарки</td><td class="mono">192.168.1.51</td><td><span class="pill bad">ошибка</span></td></tr>
+          <tr><td class="mono">18.10, 14:47</td><td>Анна Козлова</td><td>загрузка выгрузки</td><td>direct_export.xlsx</td><td class="mono">192.168.1.77</td><td><span class="pill bad">отклонена</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ===================== МОДЕЛИ И ОБУЧЕНИЕ ===================== -->
+  <div class="section" id="models">
+    <div class="grid" style="grid-template-columns:1fr 1.5fr; align-items:start">
+      <div class="card">
+        <div class="card-head"><div><h2>Текущая модель</h2><div class="csub">активна для всех прогнозов</div></div><span class="pill cur">v5</span></div>
+        <table style="font-size:13.5px">
+          <tbody>
+            <tr><td style="color:var(--muted)">Алгоритм</td><td><b>CatBoost, ансамбль из 10</b></td></tr>
+            <tr><td style="color:var(--muted)">MAPE</td><td><b>7,3 %</b> <span style="color:var(--ok);font-size:12px">(норма ≤ 15 %)</span></td></tr>
+            <tr><td style="color:var(--muted)">R²</td><td><b>0,86</b> <span style="color:var(--ok);font-size:12px">(норма ≥ 0,85)</span></td></tr>
+            <tr><td style="color:var(--muted)">Обучена на</td><td><b>800 кампаниях</b></td></tr>
+            <tr><td style="color:var(--muted)">Дата обучения</td><td><b>18.10.2026, 12:03</b></td></tr>
+          </tbody>
+        </table>
+        <button class="cta" style="width:100%;margin-top:16px" onclick="openDataset()">⟳ Обучить заново</button>
+        <div class="csub" style="text-align:center;margin-top:9px">шаг 1 из 2 — открыть окно проверки состава выборки</div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><h2>Версии модели</h2><div class="csub">хранятся все, можно вернуться назад</div></div></div>
+        <table>
+          <thead><tr><th>Версия</th><th>MAPE</th><th>R²</th><th>Кампаний</th><th>Дата</th><th>Статус</th><th></th></tr></thead>
+          <tbody>
+            <tr><td class="mono"><b>v5</b></td><td class="mono">7,3 %</td><td class="mono">0,86</td><td class="mono">800</td><td class="mono">18.10.2026</td><td><span class="pill cur">активна</span></td><td></td></tr>
+            <tr><td class="mono">v4</td><td class="mono">8,5 %</td><td class="mono">0,83</td><td class="mono">750</td><td class="mono">02.10.2026</td><td><span class="pill mark">в архиве</span></td><td><div class="row-actions"><button>Откатить</button></div></td></tr>
+            <tr><td class="mono">v3</td><td class="mono">9,1 %</td><td class="mono">0,81</td><td class="mono">700</td><td class="mono">15.09.2026</td><td><span class="pill mark">в архиве</span></td><td><div class="row-actions"><button>Откатить</button></div></td></tr>
+            <tr><td class="mono">v2</td><td class="mono">10,4 %</td><td class="mono">0,78</td><td class="mono">600</td><td class="mono">28.08.2026</td><td><span class="pill mark">в архиве</span></td><td><div class="row-actions"><button>Откатить</button></div></td></tr>
+          </tbody>
+        </table>
+        <div class="note-card">⚠️ <span>Откат версии — опасная операция: все новые прогнозы сразу начнут считаться старой моделью.</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ===================== РЕЗЕРВНЫЕ КОПИИ ===================== -->
+  <div class="section" id="backup">
+    <div class="grid" style="grid-template-columns:1fr 1.5fr; align-items:start">
+      <div class="card">
+        <div class="card-head"><div><h2>Расписание</h2></div></div>
+        <table style="font-size:13.5px">
+          <tbody>
+            <tr><td style="color:var(--muted)">Автоматически</td><td><b>ежедневно в 03:00</b></td></tr>
+            <tr><td style="color:var(--muted)">Хранилище</td><td><b>db/backup · pg_dump</b></td></tr>
+            <tr><td style="color:var(--muted)">Хранение</td><td><b>30 последних копий</b></td></tr>
+            <tr><td style="color:var(--muted)">Последняя</td><td><b>20.10.2026 · 24 МБ</b></td></tr>
+          </tbody>
+        </table>
+        <button class="cta" style="width:100%;margin-top:16px">＋ Создать копию сейчас</button>
+        <div class="danger-zone">
+          <div class="t">Восстановление из копии</div>
+          <div class="s">Текущие данные будут заменены данными копии. Требует подтверждения и фиксируется в журнале действий.</div>
+          <button>Восстановить…</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><h2>История копий</h2></div></div>
+        <table>
+          <thead><tr><th>Дата и время</th><th>Размер</th><th>Тип</th><th>Статус</th><th></th></tr></thead>
+          <tbody>
+            <tr><td class="mono">20.10.2026, 03:00</td><td class="mono">24 МБ</td><td>автоматическая</td><td><span class="pill ok">готова</span></td><td><div class="row-actions"><button>Скачать</button></div></td></tr>
+            <tr><td class="mono">19.10.2026, 03:00</td><td class="mono">24 МБ</td><td>автоматическая</td><td><span class="pill ok">готова</span></td><td><div class="row-actions"><button>Скачать</button></div></td></tr>
+            <tr><td class="mono">18.10.2026, 11:45</td><td class="mono">23 МБ</td><td>вручную · перед обучением v5</td><td><span class="pill ok">готова</span></td><td><div class="row-actions"><button>Скачать</button></div></td></tr>
+            <tr><td class="mono">18.10.2026, 03:00</td><td class="mono">23 МБ</td><td>автоматическая</td><td><span class="pill ok">готова</span></td><td><div class="row-actions"><button>Скачать</button></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <h2>Новый пользователь</h2>
+    <div class="csub">Пароль выдаётся один раз при создании</div>
+    <div class="form">
+      <div class="field"><label>Имя и фамилия</label><input placeholder="Иван Иванов" /></div>
+      <div class="field"><label>Логин</label><input placeholder="iivanov" /></div>
+      <div class="field"><label>E-mail</label><input placeholder="ivanov@adforecast.by" /></div>
+      <div class="field"><label>Роль</label><select><option>маркетолог</option><option>администратор</option></select></div>
+    </div>
+    <div class="foot">
+      <button class="ghost-btn" onclick="document.getElementById('modal').classList.remove('open')">Отмена</button>
+      <button class="cta" onclick="document.getElementById('modal').classList.remove('open')">Создать</button>
+    </div>
+  </div>
+</div>
+
+<!-- Модальное окно: состав обучающей выборки (шаг 2) -->
+<div class="modal-overlay" id="datasetModal" onclick="if (event.target === this) closeDataset()">
+  <div class="modal wide">
+    <div class="modal-head">
+      <div>
+        <h2>Состав обучающей выборки</h2>
+        <div class="csub">шаг 2 из 2 — кто попадёт в новую версию модели; отдельные кампании можно исключить</div>
+      </div>
+      <button class="close-x" onclick="closeDataset()" title="Закрыть">✕</button>
+    </div>
+  <div class="summary">
+        <div class="sum-item"><div class="k">Кандидатов</div><div class="v">812</div></div>
+        <div class="sum-item"><div class="k">Отсеяно автоматически</div><div class="v">12 <span>не завершены, мало дней, без выгрузок</span></div></div>
+        <div class="sum-item"><div class="k">В выборке</div><div class="v">800</div></div>
+        <div class="sum-item"><div class="k">Исключено вручную</div><div class="v" id="excludedCount">3</div></div>
+        <div class="sum-item"><div class="k">Пойдёт в обучение</div><div class="v" id="usedCount">797</div></div>
+      </div>
+
+      <div class="toolbar">
+        <div class="fchips">
+          <button class="fchip active">Все кандидаты</button>
+          <button class="fchip">С замечаниями · 4</button>
+          <button class="fchip">Исключённые · 3</button>
+          <button class="fchip">Новые с прошлого обучения · 37</button>
+        </div>
+        <div class="spacer"></div>
+        <input class="search" placeholder="Поиск кампании или автора…" />
+      </div>
+
+      <table>
+        <thead><tr><th style="width:38px"></th><th>Кампания</th><th>Платформа</th><th>Дней данных</th><th>ROI (факт)</th><th>Автор выгрузки</th><th>Завершена</th><th>Замечание</th></tr></thead>
+        <tbody id="datasetRows">
+          <tr><td><input type="checkbox" class="chk" checked onchange="recount(this)" /></td>
+            <td><b>Осенняя распродажа</b></td><td>Яндекс Директ</td><td class="mono">90</td><td class="mono">1,90</td><td>Марина Петрова</td><td class="mono">31.10.2026</td><td><span class="pill ok">ок</span></td></tr>
+          <tr><td><input type="checkbox" class="chk" checked onchange="recount(this)" /></td>
+            <td><b>Лидогенерация B2B</b></td><td>Google Ads</td><td class="mono">90</td><td class="mono">1,53</td><td>Марина Петрова</td><td class="mono">30.11.2026</td><td><span class="pill ok">ок</span></td></tr>
+          <tr><td><input type="checkbox" class="chk" checked onchange="recount(this)" /></td>
+            <td><b>Летняя акция</b></td><td>Google Ads</td><td class="mono">92</td><td class="mono">1,31</td><td>Дмитрий Сидоров</td><td class="mono">31.08.2026</td><td><span class="pill ok">ок</span></td></tr>
+          <tr><td><input type="checkbox" class="chk" checked onchange="recount(this)" /></td>
+            <td><b>Ретаргетинг корзины</b></td><td>VK Ads</td><td class="mono">60</td><td class="mono">1,04</td><td>Дмитрий Сидоров</td><td class="mono">31.10.2026</td><td><span class="pill warnn">короткая выборка</span></td></tr>
+          <tr><td><input type="checkbox" class="chk" checked onchange="recount(this)" /></td>
+            <td><b>Промо новинки</b></td><td>TikTok Ads</td><td class="mono">45</td><td class="mono">0,56</td><td>Анна Козлова</td><td class="mono">30.10.2026</td><td><span class="pill warnn">убыточная — валидна</span></td></tr>
+          <tr class="included-excluded"><td><input type="checkbox" class="chk" onchange="recount(this)" /></td>
+            <td><b>Проверка кабинета</b></td><td>TikTok Ads</td><td class="mono">2</td><td class="mono">—</td><td>Анна Козлова</td><td class="mono">12.10.2026</td><td><span class="pill bad">тестовая кампания</span></td></tr>
+          <tr class="included-excluded"><td><input type="checkbox" class="chk" onchange="recount(this)" /></td>
+            <td><b>Ноябрьский тест</b></td><td>VK Ads</td><td class="mono">3</td><td class="mono">12,40</td><td>Дмитрий Сидоров</td><td class="mono">05.09.2026</td><td><span class="pill bad">ROI вне границ 0,05…10</span></td></tr>
+          <tr class="included-excluded"><td><input type="checkbox" class="chk" onchange="recount(this)" /></td>
+            <td><b>import_2024_v2</b></td><td>Яндекс Директ</td><td class="mono">30</td><td class="mono">4,80</td><td>Марина Петрова</td><td class="mono">20.11.2024</td><td><span class="pill bad">доход завышен в 2,4 раза</span></td></tr>
+        </tbody>
+      </table>
+
+      <div class="table-foot" style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;font-size:12.5px;color:var(--muted)">
+        <span>Показаны первые 8 из 800. Исключённые кампании остаются в системе и участвуют в прогнозах — только не попадают в обучение.</span>
+        <div style="display:flex;gap:10px;align-items:center">
+          <button class="ghost-btn" style="padding:9px 16px;font-size:12.5px" onclick="resetAll()">Вернуть всё</button>
+          <button class="cta" style="padding:10px 22px">Запустить обучение</button>
+        </div>
+      </div>
+
+      <div class="note-card">💡 <span>Состав выборки сохраняется в метаданные версии (<b>список campaign_id, правило отбора, хэш датасета</b>) — потом всегда видно, на чём обучена модель. Каждое исключение пишется в журнал действий с причиной.</span></div>
+  </div>
+</div>
+
+<script>
+  function showTab(btn, id) {
+    document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.section').forEach(s => s.classList.toggle('open', s.id === id));
+  }
+  function recount(changed) {
+    const row = changed.closest('tr');
+    row.classList.toggle('included-excluded', !changed.checked);
+    const excluded = document.querySelectorAll('#datasetRows .chk:not(:checked)').length;
+    document.getElementById('excludedCount').textContent = excluded;
+    document.getElementById('usedCount').textContent = 800 - excluded;
+  }
+  function resetAll() {
+    document.querySelectorAll('#datasetRows .chk').forEach(chk => {
+      chk.checked = true;
+      chk.closest('tr').classList.remove('included-excluded');
+    });
+    document.getElementById('excludedCount').textContent = 0;
+    document.getElementById('usedCount').textContent = 800;
+  }
+
+  function openDataset() { document.getElementById('datasetModal').classList.add('open'); }
+  function closeDataset() { document.getElementById('datasetModal').classList.remove('open'); }
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      closeDataset();
+      document.getElementById('modal').classList.remove('open');
+    }
+  });
+
+  // Активность пользователей: круговая диаграмма по типам действий с выбором периода
+  const actColors = ['#6B7280', '#F59E0B', '#34D399', '#60A5FA'];
+  const actNames = ['входы', 'загрузки', 'прогнозы', 'экспорты'];
+  // 30 дней: 22.09 – 21.10, по строке [входы, загрузки, прогнозы, экспорты]
+  const activity = [
+    ['22.09', [6, 2, 4, 1]], ['23.09', [7, 3, 5, 2]], ['24.09', [6, 2, 4, 2]], ['25.09', [8, 3, 5, 2]],
+    ['26.09', [7, 2, 4, 3]], ['27.09', [3, 1, 2, 1]], ['28.09', [2, 1, 1, 0]], ['29.09', [7, 3, 5, 2]],
+    ['30.09', [8, 3, 6, 2]], ['01.10', [7, 2, 5, 2]], ['02.10', [6, 2, 4, 2]], ['03.10', [7, 3, 5, 3]],
+    ['04.10', [3, 1, 2, 1]], ['05.10', [2, 1, 1, 1]], ['06.10', [8, 3, 5, 2]], ['07.10', [7, 2, 5, 2]],
+    ['08.10', [5, 2, 3, 1]], ['09.10', [6, 2, 4, 2]], ['10.10', [3, 1, 1, 0]], ['11.10', [2, 1, 1, 0]],
+    ['12.10', [7, 3, 5, 2]], ['13.10', [6, 3, 4, 2]], ['14.10', [7, 2, 5, 3]], ['15.10', [8, 3, 6, 2]],
+    ['16.10', [7, 2, 5, 3]], ['17.10', [3, 1, 2, 1]], ['18.10', [2, 1, 1, 1]], ['19.10', [8, 3, 6, 3]],
+    ['20.10', [9, 4, 7, 4]], ['21.10', [4, 2, 3, 1]],
+  ];
+  const activityAllTime = [486, 173, 291, 118]; // с 03.08.2026
+  const actPeriodLabels = { 1: 'за сегодня, 21 октября', 7: 'за последние 7 дней', 30: 'за последние 30 дней', all: 'за всё время — с 03.08.2026' };
+
+  function renderActivity(days, btn) {
+    if (btn) {
+      document.querySelectorAll('#summary .fchip').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    }
+    const sums = [0, 0, 0, 0];
+    if (days === 'all') {
+      activityAllTime.forEach((value, i) => { sums[i] = value; });
+    } else {
+      activity.slice(-days).forEach(([, values]) => values.forEach((value, i) => { sums[i] += value; }));
+    }
+    const total = sums.reduce((a, b) => a + b, 0);
+    let start = 0;
+    let arcs = '';
+    sums.forEach((value, i) => {
+      const len = total ? value / total * 100 : 0;
+      if (len > 0) {
+        arcs += `<circle cx="21" cy="21" r="15.9155" fill="none" stroke="${actColors[i]}" stroke-width="6.5" `
+          + `stroke-dasharray="${len.toFixed(2)} ${(100 - len).toFixed(2)}" stroke-dashoffset="${(25 - start).toFixed(2)}"/>`;
+      }
+      start += len;
+    });
+    document.getElementById('activityDonut').innerHTML =
+      `<circle cx="21" cy="21" r="15.9155" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="6.5"/>` + arcs
+      + `<text x="21" y="20" text-anchor="middle" fill="#F5F5F4" font-size="8" font-weight="700" font-family="Plus Jakarta Sans">${total}</text>`
+      + `<text x="21" y="27" text-anchor="middle" fill="rgba(255,255,255,0.5)" font-size="3.2">действий</text>`;
+    document.getElementById('activityLegend').innerHTML = sums.map((value, i) => `
+      <div class="r">
+        <span class="dot" style="background:${actColors[i]}"></span>
+        <span class="n">${actNames[i]}</span>
+        <span class="v">${value}${total ? ' · ' + (value / total * 100).toFixed(0) + ' %' : ''}</span>
+      </div>`).join('');
+    document.getElementById('activityPeriod').textContent = 'распределение действий — ' + actPeriodLabels[days];
+  }
+  renderActivity(7);
+
+  // Точность прогнозов против факта по закрытым кампаниям
+  function drawAccuracy() {
+    const W = 470, H = 230, L = 46, R = 16, T = 24, B = 30, max = 12;
+    const labels = ['авг', 'сен', 'окт'];
+    const values = [9.4, 8.6, 7.8];
+    const x = i => L + (W - L - R) * i / (values.length - 1);
+    const y = v => T + (H - T - B) * (v / max);
+    let g = '';
+    for (let v = 0; v <= max; v += 3) {
+      g += `<line class="grid-line" x1="${L}" y1="${y(v)}" x2="${W - R}" y2="${y(v)}"/>`;
+      g += `<text class="axis-label" x="${L - 8}" y="${y(v) + 4}" text-anchor="end">${v} %</text>`;
+    }
+    labels.forEach((l, i) => { g += `<text class="axis-label" x="${x(i)}" y="${H - 8}" text-anchor="middle">${l}</text>`; });
+    g += `<path d="${values.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')}" fill="none" stroke="#F59E0B" stroke-width="2.5"/>`;
+    g += values.map((v, i) => `<circle cx="${x(i)}" cy="${y(v)}" r="4" fill="#F59E0B"/>` +
+      `<text x="${x(i)}" y="${y(v) - 13}" text-anchor="middle" fill="#F5F5F4" font-size="11.5" font-family="Inter">${v.toFixed(1).replace('.', ',')} %</text>`).join('');
+    document.getElementById('accuracy').innerHTML = g;
+  }
+  drawAccuracy();
+
+</script>
+</body>
+</html>

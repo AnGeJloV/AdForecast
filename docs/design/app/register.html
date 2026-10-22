@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AdForecast — Регистрация</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --accent: #F59E0B; --accent-strong: #D97706;
+    --bg: #0A0A0B; --line: rgba(255,255,255,0.09);
+    --text: #F5F5F4; --muted: rgba(255,255,255,0.55);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; min-height: 100vh; overflow-x: hidden; }
+  h1 { font-family: 'Plus Jakarta Sans', sans-serif; }
+
+  .bg {
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse 700px 500px at 82% 22%, rgba(245,158,11,0.22), transparent 70%),
+      radial-gradient(ellipse 600px 500px at 10% 90%, rgba(52,211,153,0.08), transparent 70%),
+      var(--bg);
+  }
+
+  .top { position: relative; z-index: 2; display: flex; align-items: center; padding: 26px 44px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 700; font-size: 17px; text-decoration: none; color: inherit; }
+
+  main { position: relative; z-index: 2; display: flex; align-items: center; min-height: calc(100vh - 92px); padding: 0 8vw; }
+  .panel { width: 100%; max-width: 940px; display: grid; grid-template-columns: 1fr 380px; gap: 60px; align-items: center; }
+  .intro h1 { font-size: clamp(1.9rem, 3.2vw, 2.9rem); font-weight: 500; line-height: 1.12; letter-spacing: -0.02em; }
+  .intro p { color: var(--muted); font-size: 14.5px; line-height: 1.65; margin-top: 16px; max-width: 420px; }
+  .intro ul { margin: 20px 0 0 18px; color: var(--muted); font-size: 13.5px; line-height: 1.9; }
+
+  .form-card { background: rgba(255,255,255,0.04); border: 1px solid var(--line); border-radius: 24px; padding: 28px; }
+  .form-card h2 { font-size: 19px; font-weight: 600; }
+  .form-card .csub { font-size: 12.5px; color: var(--muted); margin-top: 5px; }
+  .form { margin-top: 22px; display: flex; flex-direction: column; gap: 13px; }
+  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 7px; }
+  .field input {
+    width: 100%; padding: 13px 16px; border-radius: 13px; border: 1px solid var(--line);
+    background: rgba(255,255,255,0.05); color: #fff; font-size: 13.5px; font-family: 'Inter', sans-serif; outline: none;
+    transition: border-color .15s;
+  }
+  .field input:focus { border-color: var(--accent); }
+  .cta {
+    margin-top: 8px; padding: 14px; border-radius: 999px; border: none; cursor: pointer;
+    font-size: 14px; font-weight: 600; font-family: 'Inter', sans-serif;
+    background: var(--accent); color: #14100a; transition: background .15s, transform .12s;
+  }
+  .cta:hover { background: var(--accent-strong); transform: scale(1.02); }
+  .hint { font-size: 12.5px; color: var(--muted); margin-top: 14px; text-align: center; }
+  .hint a { color: var(--accent); text-decoration: none; font-weight: 600; margin-left: 5px; }
+  .hint a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<div class="bg"></div>
+
+<div class="top">
+  <a class="brand" href="login.html">
+    <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><rect x="2" y="14" width="5" height="9" rx="1.5" fill="#F59E0B"/><rect x="10.5" y="8" width="5" height="15" rx="1.5" fill="#F59E0B" opacity="0.7"/><rect x="19" y="3" width="5" height="20" rx="1.5" fill="#F59E0B" opacity="0.45"/></svg>
+    AdForecast
+  </a>
+</div>
+
+<main>
+  <div class="panel">
+    <div class="intro">
+      <h1>Регистрация<br/>в AdForecast</h1>
+      <p>Учётная запись нужна, чтобы загружать выгрузки рекламных кабинетов и запускать прогнозы окупаемости по своим кампаниям.</p>
+      <ul>
+        <li>прогноз окупаемости до старта кампании</li>
+        <li>вероятность возврата средств и срок окупаемости</li>
+        <li>отчёты в XLSX и PDF для согласования бюджета</li>
+      </ul>
+    </div>
+
+    <div class="form-card">
+      <h2>Новая учётная запись</h2>
+      <div class="csub">все поля обязательны</div>
+      <div class="form">
+        <div class="field"><label>Имя и фамилия</label><input placeholder="Иван Иванов" /></div>
+        <div class="field"><label>Логин</label><input placeholder="iivanov" /></div>
+        <div class="field"><label>E-mail</label><input placeholder="ivanov@adforecast.by" /></div>
+        <div class="field"><label>Пароль</label><input type="password" placeholder="не менее 8 символов" /></div>
+        <button class="cta" onclick="location.href='login.html'">Зарегистрироваться</button>
+        <div class="hint">уже есть аккаунт?<a href="login.html">Войти</a></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+</body>
+</html>

@@ -5,7 +5,10 @@ import by.bsuir.adforecast.repo.PermissionRepository;
 import by.bsuir.adforecast.repo.UserRepository;
 import by.bsuir.adforecast.security.AuthPrincipal;
 import by.bsuir.adforecast.security.JwtService;
+import by.bsuir.adforecast.user.RegisterRequest;
+import by.bsuir.adforecast.user.UserService;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -14,6 +17,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
@@ -27,35 +31,38 @@ public class AuthController {
     private final UserRepository userRepository;
     private final PermissionRepository permissionRepository;
     private final JwtService jwtService;
+    private final UserService userService;
 
     public AuthController(AuthenticationManager authenticationManager,
                           UserRepository userRepository,
                           PermissionRepository permissionRepository,
-                          JwtService jwtService) {
+                          JwtService jwtService,
+                          UserService userService) {
         this.authenticationManager = authenticationManager;
         this.userRepository = userRepository;
         this.permissionRepository = permissionRepository;
         this.jwtService = jwtService;
+        this.userService = userService;
     }
 
     @PostMapping("/login")
     public LoginResponse login(@Valid @RequestBody LoginRequest request) {
         authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(request.login(), request.password()));
-        User user = userRepository.findByLogin(request.login()).orElseThrow();
-        List<String> permissions = permissionRepository.findByRoleId(user.getRole().getId())
-                .stream()
-                .map(permission -> permission.getPermissionCode())
-                .toList();
-        user.setLastLogin(LocalDateTime.now());
-        userRepository.save(user);
-        String token = jwtService.issue(user.getId(), user.getLogin(), user.getRole().getRoleName(), permissions);
-        return new LoginResponse(token, user.getLogin(), user.getRole().getRoleName());
+        return issueLogin(userRepository.findByLogin(request.login()).orElseThrow());
+    }
+
+    @PostMapping("/register")
+    @ResponseStatus(HttpStatus.CREATED)
+    public LoginResponse register(@Valid @RequestBody RegisterRequest request) {
+        User user = userService.register(request);
+        return issueLogin(user);
     }
 
     @GetMapping("/me")
     public CurrentUserResponse me(Authentication authentication) {
         AuthPrincipal principal = (AuthPrincipal) authentication.getPrincipal();
+        User user = userRepository.findByIdWithRole(principal.userId()).orElseThrow();
         String role = authentication.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .filter(authority -> authority.startsWith("ROLE_"))
@@ -66,6 +73,17 @@ public class AuthController {
                 .map(GrantedAuthority::getAuthority)
                 .filter(authority -> !authority.startsWith("ROLE_"))
                 .toList();
-        return CurrentUserResponse.of(principal.login(), role, permissions);
+        return CurrentUserResponse.of(user.getLogin(), user.getFullName(), role, permissions);
+    }
+
+    private LoginResponse issueLogin(User user) {
+        List<String> permissions = permissionRepository.findByRoleId(user.getRole().getId())
+                .stream()
+                .map(permission -> permission.getPermissionCode())
+                .toList();
+        user.setLastLogin(LocalDateTime.now());
+        userRepository.save(user);
+        String token = jwtService.issue(user.getId(), user.getLogin(), user.getRole().getRoleName(), permissions);
+        return new LoginResponse(token, user.getLogin(), user.getFullName(), user.getRole().getRoleName());
     }
 }

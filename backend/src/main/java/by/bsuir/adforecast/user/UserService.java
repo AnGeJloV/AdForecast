@@ -1,5 +1,6 @@
 package by.bsuir.adforecast.user;
 
+import by.bsuir.adforecast.audit.AuditService;
 import by.bsuir.adforecast.domain.Role;
 import by.bsuir.adforecast.domain.User;
 import by.bsuir.adforecast.repo.RoleRepository;
@@ -15,14 +16,21 @@ import java.util.List;
 @Transactional
 public class UserService {
 
+    private static final String MARKETER_ROLE = "маркетолог";
+
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AuditService auditService;
 
-    public UserService(UserRepository userRepository, RoleRepository roleRepository, PasswordEncoder passwordEncoder) {
+    public UserService(UserRepository userRepository,
+                       RoleRepository roleRepository,
+                       PasswordEncoder passwordEncoder,
+                       AuditService auditService) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
+        this.auditService = auditService;
     }
 
     public List<UserResponse> list() {
@@ -37,7 +45,7 @@ public class UserService {
                 .toList();
     }
 
-    public UserResponse create(CreateUserRequest request) {
+    public UserResponse create(CreateUserRequest request, long actorId) {
         if (userRepository.existsByLogin(request.login())) {
             throw new IllegalArgumentException("логин уже занят");
         }
@@ -49,18 +57,44 @@ public class UserService {
         User user = new User();
         user.setLogin(request.login());
         user.setEmail(request.email());
+        user.setFullName(request.fullName());
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         user.setRole(role);
         user.setIsActive(true);
-        return toResponse(userRepository.save(user));
+        User saved = userRepository.save(user);
+        auditService.record(actorId, "создание пользователя", "пользователь", saved.getId(),
+                "логин " + saved.getLogin() + ", роль " + role.getRoleName());
+        return toResponse(saved);
     }
 
-    public UserResponse update(long targetId, long currentUserId, UpdateUserRequest request) {
+    public User register(RegisterRequest request) {
+        if (userRepository.existsByLogin(request.login())) {
+            throw new IllegalArgumentException("логин уже занят");
+        }
+        if (userRepository.existsByEmail(request.email())) {
+            throw new IllegalArgumentException("email уже используется");
+        }
+        Role role = roleRepository.findByRoleName(MARKETER_ROLE)
+                .orElseThrow(() -> new EntityNotFoundException("роль не найдена"));
+        User user = new User();
+        user.setLogin(request.login());
+        user.setEmail(request.email());
+        user.setFullName(request.fullName());
+        user.setPasswordHash(passwordEncoder.encode(request.password()));
+        user.setRole(role);
+        user.setIsActive(true);
+        User saved = userRepository.save(user);
+        auditService.record(saved.getId(), "регистрация", "пользователь", saved.getId(),
+                "логин " + saved.getLogin());
+        return saved;
+    }
+
+    public UserResponse update(long targetId, long actorId, UpdateUserRequest request) {
         User user = userRepository.findByIdWithRole(targetId)
                 .orElseThrow(() -> new EntityNotFoundException("пользователь не найден"));
         Role role = roleRepository.findById(request.roleId())
                 .orElseThrow(() -> new EntityNotFoundException("роль не найдена"));
-        boolean self = targetId == currentUserId;
+        boolean self = targetId == actorId;
         if (self && (!request.isActive() || role.getId() != user.getRole().getId())) {
             throw new IllegalArgumentException("нельзя изменить собственную роль или заблокировать себя");
         }
@@ -68,9 +102,13 @@ public class UserService {
             throw new IllegalArgumentException("email уже используется");
         }
         user.setEmail(request.email());
+        user.setFullName(request.fullName());
         user.setRole(role);
         user.setIsActive(request.isActive());
-        return toResponse(userRepository.save(user));
+        User saved = userRepository.save(user);
+        auditService.record(actorId, "изменение пользователя", "пользователь", saved.getId(),
+                "роль " + role.getRoleName() + (request.isActive() ? "" : ", блокировка"));
+        return toResponse(saved);
     }
 
     private static UserResponse toResponse(User user) {
@@ -78,6 +116,7 @@ public class UserService {
                 user.getId(),
                 user.getLogin(),
                 user.getEmail(),
+                user.getFullName(),
                 user.getRole().getRoleName(),
                 user.getIsActive(),
                 user.getLastLogin()

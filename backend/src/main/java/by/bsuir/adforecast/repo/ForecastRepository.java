@@ -21,12 +21,6 @@ public interface ForecastRepository extends JpaRepository<Forecast, Long> {
             """)
     Optional<Forecast> findByIdWithModel(@Param("id") long id);
 
-    @Query(value = "select count(*) from forecasts", nativeQuery = true)
-    long countAll();
-
-    @Query(value = "select count(*) from forecasts where status = 'COMPLETED'", nativeQuery = true)
-    long countAllCompleted();
-
     @Query(value = """
             select count(*) from forecasts
             where campaign_id in (select campaign_id from campaign_access where user_id = :userId)

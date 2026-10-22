@@ -1,7 +1,6 @@
 package by.bsuir.adforecast.campaign;
 
 import by.bsuir.adforecast.security.AuthPrincipal;
-import by.bsuir.adforecast.security.Roles;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -28,16 +27,13 @@ public class CampaignController {
     @GetMapping
     public List<CampaignSummaryResponse> list(Authentication authentication) {
         AuthPrincipal principal = (AuthPrincipal) authentication.getPrincipal();
-        if (Roles.isAdmin(authentication)) {
-            return campaignService.listAll();
-        }
         return campaignService.listForUser(principal.userId());
     }
 
     @GetMapping("/{id}")
     public CampaignDetailResponse get(@PathVariable("id") long id, Authentication authentication) {
         AuthPrincipal principal = (AuthPrincipal) authentication.getPrincipal();
-        return campaignService.get(id, Roles.isAdmin(authentication), principal.userId());
+        return campaignService.get(id, principal.userId());
     }
 
     @PostMapping
@@ -54,6 +50,6 @@ public class CampaignController {
                                           @Valid @RequestBody CampaignUpdateRequest request,
                                           Authentication authentication) {
         AuthPrincipal principal = (AuthPrincipal) authentication.getPrincipal();
-        return campaignService.update(id, Roles.isAdmin(authentication), principal.userId(), request);
+        return campaignService.update(id, principal.userId(), request);
     }
 }

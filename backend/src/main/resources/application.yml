@@ -23,3 +23,4 @@ adforecast:
   jwt:
     secret: ${JWT_SECRET}
     ttl: ${JWT_TTL:8h}
+  backups-dir: ${BACKUPS_DIR:../db/backup}

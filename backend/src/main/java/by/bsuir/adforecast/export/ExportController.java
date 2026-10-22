@@ -1,7 +1,6 @@
 package by.bsuir.adforecast.export;
 
 import by.bsuir.adforecast.security.AuthPrincipal;
-import by.bsuir.adforecast.security.Roles;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -32,7 +31,7 @@ public class ExportController {
     public ResponseEntity<byte[]> exportXlsx(@PathVariable("forecastId") long forecastId,
                                              Authentication authentication) {
         return respond(forecastId, authentication, exportService.exportXlsx(
-                forecastId, Roles.isAdmin(authentication), principal(authentication).userId()), "xlsx", XLSX_TYPE);
+                forecastId, principal(authentication).userId()), "xlsx", XLSX_TYPE);
     }
 
     @GetMapping("/pdf")
@@ -40,7 +39,7 @@ public class ExportController {
     public ResponseEntity<byte[]> exportPdf(@PathVariable("forecastId") long forecastId,
                                             Authentication authentication) {
         return respond(forecastId, authentication, exportService.exportPdf(
-                forecastId, Roles.isAdmin(authentication), principal(authentication).userId()), "pdf", PDF_TYPE);
+                forecastId, principal(authentication).userId()), "pdf", PDF_TYPE);
     }
 
     private ResponseEntity<byte[]> respond(long forecastId, Authentication authentication,

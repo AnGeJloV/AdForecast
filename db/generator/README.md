@@ -19,6 +19,8 @@ docker exec -i adforecast-db-1 psql -U adforecast -d adforecast -v ON_ERROR_STOP
 
 `exports/*.csv` и `exports/*.xlsx` — файлы формата загрузки (FR-3), колонки: `date`, `impressions`, `clicks`, `cost`, `revenue`.
 
+`exports/wizard_*` — фикстуры мастера загрузки: русские/английские названия колонок, разные разделители (`;`/`,`), десятичный запятая/точка, форматы дат `ДД.ММ.ГГГГ`/`ММ/ДД/ГГГГ`, кодировка CP1251, бессмысленные названия колонок (распознавание по содержимому), файл с ошибочными строками. Используются для проверки `POST /api/campaigns/{id}/uploads/analyze` и загрузки с ручным маппингом.
+
 CSV создает `generate.py`. Для XLSX требуется `openpyxl`:
 
 ```bash

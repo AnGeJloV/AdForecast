@@ -10,6 +10,7 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -39,6 +40,50 @@ public class MlServiceClient {
         } catch (RestClientResponseException exception) {
             log.error("ml-service /models вернул {}: {}", exception.getStatusCode(), exception.getResponseBodyAsString());
             throw new MlServiceException("ошибка сервиса прогнозирования", exception);
+        }
+    }
+
+    public TrainAcceptedResponse train(List<Map<String, Object>> records, Integer ensembleSize, Double holdoutFraction,
+                                       Map<String, Object> datasetSnapshot) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("records", records);
+        body.put("ensemble_size", ensembleSize);
+        body.put("holdout_fraction", holdoutFraction);
+        body.put("dataset_snapshot", datasetSnapshot);
+        try {
+            TrainAcceptedResponse response = client.post()
+                    .uri("/train")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(body)
+                    .retrieve()
+                    .body(TrainAcceptedResponse.class);
+            if (response == null) {
+                throw new MlServiceException("пустой ответ сервиса прогнозирования");
+            }
+            return response;
+        } catch (ResourceAccessException exception) {
+            throw new MlServiceException("сервис прогнозирования недоступен", exception);
+        } catch (RestClientResponseException exception) {
+            log.error("ml-service /train вернул {}: {}", exception.getStatusCode(), exception.getResponseBodyAsString());
+            throw new MlServiceException("ошибка запуска обучения: " + exception.getResponseBodyAsString(), exception);
+        }
+    }
+
+    public TrainStatusResponse trainStatus(String taskId) {
+        try {
+            TrainStatusResponse response = client.get()
+                    .uri("/train/{taskId}", taskId)
+                    .retrieve()
+                    .body(TrainStatusResponse.class);
+            if (response == null) {
+                throw new MlServiceException("пустой ответ сервиса прогнозирования");
+            }
+            return response;
+        } catch (ResourceAccessException exception) {
+            throw new MlServiceException("сервис прогнозирования недоступен", exception);
+        } catch (RestClientResponseException exception) {
+            log.error("ml-service /train/{{taskId}} вернул {}: {}", exception.getStatusCode(), exception.getResponseBodyAsString());
+            throw new MlServiceException("ошибка получения статуса обучения", exception);
         }
     }
 

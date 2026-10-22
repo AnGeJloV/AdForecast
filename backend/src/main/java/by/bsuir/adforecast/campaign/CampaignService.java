@@ -35,24 +35,16 @@ public class CampaignService {
         this.userRepository = userRepository;
     }
 
-    public List<CampaignSummaryResponse> listAll() {
-        return campaignRepository.findAllSummaries().stream()
-                .map(CampaignSummaryResponse::from)
-                .toList();
-    }
-
     public List<CampaignSummaryResponse> listForUser(long userId) {
         return campaignRepository.findUserSummaries(userId).stream()
                 .map(CampaignSummaryResponse::from)
                 .toList();
     }
 
-    public CampaignDetailResponse get(long campaignId, boolean admin, long userId) {
+    public CampaignDetailResponse get(long campaignId, long userId) {
         Campaign campaign = campaignRepository.findWithAccount(campaignId)
                 .orElseThrow(() -> new EntityNotFoundException("кампания не найдена"));
-        if (!admin) {
-            requireAccess(userId, campaignId);
-        }
+        requireAccess(userId, campaignId);
         CampaignSummaryProjection summary = campaignRepository.findSummary(campaignId)
                 .orElseThrow(() -> new EntityNotFoundException("кампания не найдена"));
         ForecastStatsProjection stats = campaignRepository.findForecastStats(campaignId).orElse(null);
@@ -101,12 +93,10 @@ public class CampaignService {
         return findSummary(campaign.getId());
     }
 
-    public CampaignSummaryResponse update(long campaignId, boolean admin, long userId, CampaignUpdateRequest request) {
+    public CampaignSummaryResponse update(long campaignId, long userId, CampaignUpdateRequest request) {
         Campaign campaign = campaignRepository.findById(campaignId)
                 .orElseThrow(() -> new EntityNotFoundException("кампания не найдена"));
-        if (!admin) {
-            requireAccess(userId, campaignId);
-        }
+        requireAccess(userId, campaignId);
         campaign.setCampaignName(request.campaignName());
         campaign.setBudget(request.budget());
         campaign.setCurrency(request.currency());

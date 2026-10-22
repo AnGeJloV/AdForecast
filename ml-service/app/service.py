@@ -33,13 +33,15 @@ class MlService:
     _tasks: dict[str, TrainingTask] = field(default_factory=dict)
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
-    def submit_training(self, records: list[dict], ensemble_size: int, holdout_fraction: float) -> str:
+    def submit_training(
+        self, records: list[dict], ensemble_size: int, holdout_fraction: float, snapshot: dict | None
+    ) -> str:
         task_id = uuid.uuid4().hex[:12]
         with self._lock:
             self._tasks[task_id] = TrainingTask(status="RUNNING")
         thread = threading.Thread(
             target=self._run_training,
-            args=(task_id, records, ensemble_size, holdout_fraction),
+            args=(task_id, records, ensemble_size, holdout_fraction, snapshot),
             daemon=True,
         )
         thread.start()
@@ -51,9 +53,13 @@ class MlService:
             raise TaskNotFoundError(task_id)
         return task
 
-    def _run_training(self, task_id: str, records: list[dict], ensemble_size: int, holdout_fraction: float) -> None:
+    def _run_training(
+        self, task_id: str, records: list[dict], ensemble_size: int, holdout_fraction: float, snapshot: dict | None
+    ) -> None:
         try:
             ensemble = train_ensemble(records, self.store.next_version(), ensemble_size, holdout_fraction)
+            if snapshot is not None:
+                ensemble.meta["dataset_snapshot"] = snapshot
             self.store.save(ensemble)
             with self._lock:
                 self._tasks[task_id] = TrainingTask(status="COMPLETED", model=ensemble.meta)

@@ -1,6 +1,7 @@
 package by.bsuir.adforecast.dashboard;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 public record DashboardResponse(
         long campaignsTotal,
@@ -14,6 +15,22 @@ public record DashboardResponse(
         long profitableCampaigns,
         long unprofitableCampaigns,
         long forecastsTotal,
-        long forecastsCompleted
+        long forecastsCompleted,
+        List<PlanFactRow> planVsFact,
+        BigDecimal planVsFactAvgDeviation
 ) {
+
+    public record PlanFactRow(
+            long campaignId,
+            String campaignName,
+            String currency,
+            String platform,
+            BigDecimal actualRoi,
+            BigDecimal forecastRoi,
+            BigDecimal deviation,
+            long days,
+            long horizon,
+            boolean comparable
+    ) {
+    }
 }

@@ -1,7 +1,6 @@
 package by.bsuir.adforecast.forecast;
 
 import by.bsuir.adforecast.security.AuthPrincipal;
-import by.bsuir.adforecast.security.Roles;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -32,14 +31,14 @@ public class ForecastController {
                                 @Valid @RequestBody ForecastRequest request,
                                 Authentication authentication) {
         AuthPrincipal principal = (AuthPrincipal) authentication.getPrincipal();
-        return forecastService.run(campaignId, Roles.isAdmin(authentication), principal.userId(), request);
+        return forecastService.run(campaignId, principal.userId(), request);
     }
 
     @GetMapping("/api/campaigns/{campaignId}/forecasts")
     public List<ForecastResponse> history(@PathVariable("campaignId") long campaignId,
                                           Authentication authentication) {
         AuthPrincipal principal = (AuthPrincipal) authentication.getPrincipal();
-        return forecastService.history(campaignId, Roles.isAdmin(authentication), principal.userId());
+        return forecastService.history(campaignId, principal.userId());
     }
 
     @PostMapping("/api/forecasts/compare")

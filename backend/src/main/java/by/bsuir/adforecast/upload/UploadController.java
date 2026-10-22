@@ -1,7 +1,8 @@
 package by.bsuir.adforecast.upload;
 
 import by.bsuir.adforecast.security.AuthPrincipal;
-import by.bsuir.adforecast.security.Roles;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -15,16 +16,18 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/campaigns/{campaignId}/uploads")
 public class UploadController {
 
-
     private final UploadService uploadService;
+    private final ObjectMapper objectMapper;
 
-    public UploadController(UploadService uploadService) {
+    public UploadController(UploadService uploadService, ObjectMapper objectMapper) {
         this.uploadService = uploadService;
+        this.objectMapper = objectMapper;
     }
 
     @PostMapping
@@ -32,14 +35,36 @@ public class UploadController {
     @PreAuthorize("hasAuthority('upload.manage')")
     public UploadResponse upload(@PathVariable("campaignId") long campaignId,
                                  @RequestParam("file") MultipartFile file,
+                                 @RequestParam(value = "mapping", required = false) String mapping,
                                  Authentication authentication) {
         AuthPrincipal principal = (AuthPrincipal) authentication.getPrincipal();
-        return uploadService.upload(campaignId, Roles.isAdmin(authentication), principal.userId(), file);
+        return uploadService.upload(campaignId, principal.userId(), file, parseMapping(mapping));
+    }
+
+    @PostMapping("/analyze")
+    @PreAuthorize("hasAuthority('upload.manage')")
+    public AnalyzeResponse analyze(@PathVariable("campaignId") long campaignId,
+                                   @RequestParam("file") MultipartFile file,
+                                   Authentication authentication) {
+        AuthPrincipal principal = (AuthPrincipal) authentication.getPrincipal();
+        return uploadService.analyze(campaignId, principal.userId(), file);
     }
 
     @GetMapping
-    public List<UploadResponse> history(@PathVariable("campaignId") long campaignId) {
-        return uploadService.history(campaignId);
+    public List<UploadResponse> history(@PathVariable("campaignId") long campaignId, Authentication authentication) {
+        AuthPrincipal principal = (AuthPrincipal) authentication.getPrincipal();
+        return uploadService.history(campaignId, principal.userId());
     }
 
+    private Map<String, Integer> parseMapping(String mapping) {
+        if (mapping == null || mapping.isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(mapping, new TypeReference<Map<String, Integer>>() {
+            });
+        } catch (Exception exception) {
+            throw new IllegalArgumentException("некорректное сопоставление колонок");
+        }
+    }
 }

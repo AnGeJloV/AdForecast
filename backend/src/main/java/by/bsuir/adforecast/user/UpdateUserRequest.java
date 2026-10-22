@@ -12,6 +12,10 @@ public record UpdateUserRequest(
         @Size(max = 255)
         String email,
 
+        @NotBlank
+        @Size(min = 2, max = 255)
+        String fullName,
+
         @NotNull
         Long roleId,
 

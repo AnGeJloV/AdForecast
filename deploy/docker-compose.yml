@@ -18,12 +18,15 @@ services:
 
   backend:
     build: ../backend
+    volumes:
+      - ../db/backup:/backups:ro
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/adforecast
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-adforecast}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       ML_SERVICE_BASE_URL: http://ml-service:8000
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      BACKUPS_DIR: /backups
     depends_on:
       db:
         condition: service_healthy

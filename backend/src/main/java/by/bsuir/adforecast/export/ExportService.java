@@ -62,28 +62,26 @@ public class ExportService {
         this.exportHistoryRepository = exportHistoryRepository;
     }
 
-    public byte[] exportXlsx(long forecastId, boolean admin, long userId) {
-        ForecastReport report = prepareReport(forecastId, admin, userId);
+    public byte[] exportXlsx(long forecastId, long userId) {
+        ForecastReport report = prepareReport(forecastId, userId);
         byte[] content = buildXlsx(report);
         saveHistory(forecastId, ExportFormat.XLSX);
         return content;
     }
 
-    public byte[] exportPdf(long forecastId, boolean admin, long userId) {
-        ForecastReport report = prepareReport(forecastId, admin, userId);
+    public byte[] exportPdf(long forecastId, long userId) {
+        ForecastReport report = prepareReport(forecastId, userId);
         byte[] content = buildPdf(report);
         saveHistory(forecastId, ExportFormat.PDF);
         return content;
     }
 
-    private ForecastReport prepareReport(long forecastId, boolean admin, long userId) {
+    private ForecastReport prepareReport(long forecastId, long userId) {
         Forecast forecast = forecastRepository.findByIdWithModel(forecastId)
                 .orElseThrow(() -> new EntityNotFoundException("прогноз не найден"));
         Campaign campaign = campaignRepository.findWithAccount(forecast.getCampaign().getId())
                 .orElseThrow(() -> new EntityNotFoundException("кампания не найдена"));
-        if (!admin) {
-            campaignService.requireAccess(userId, campaign.getId());
-        }
+        campaignService.requireAccess(userId, campaign.getId());
         if (forecast.getStatus() != ForecastStatus.COMPLETED) {
             throw new IllegalStateException("прогноз не завершен, экспорт невозможен");
         }

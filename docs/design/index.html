@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AdForecast — макет интерфейса</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', sans-serif; background: #0A0A0B; color: #F5F5F4;
+    min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; padding: 48px 24px;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 30px; font-weight: 600; }
+  p.lead { color: rgba(255,255,255,0.55); font-size: 14.5px; margin-top: 10px; max-width: 620px; text-align: center; line-height: 1.6; }
+  .cards { display: grid; grid-template-columns: repeat(3, 300px); gap: 20px; margin-top: 42px; }
+  a.card {
+    border-radius: 22px; padding: 24px; text-decoration: none; color: inherit;
+    border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.04);
+    transition: transform .15s, border-color .15s;
+  }
+  a.card:hover { transform: translateY(-4px); border-color: rgba(245,158,11,0.6); }
+  .ic {
+    width: 44px; height: 44px; border-radius: 14px; display: flex; align-items: center; justify-content: center;
+    font-size: 19px; margin-bottom: 16px; background: rgba(245,158,11,0.14);
+  }
+  .card h2 { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 17px; font-weight: 600; }
+  .card p { font-size: 12.5px; color: rgba(255,255,255,0.55); margin-top: 7px; line-height: 1.55; }
+  .start {
+    margin-top: 30px; padding: 13px 30px; border-radius: 999px;
+    background: #F59E0B; color: #14100a; font-weight: 600; font-size: 14.5px; text-decoration: none;
+    transition: background .15s;
+  }
+  .start:hover { background: #D97706; }
+  .note { margin-top: 28px; font-size: 12.5px; color: rgba(255,255,255,0.4); max-width: 640px; text-align: center; line-height: 1.7; }
+</style>
+</head>
+<body>
+  <h1>AdForecast — макет интерфейса</h1>
+  <p class="lead">Финальный шаблон: тёмная тема, оранжевый акцент, парящая панель навигации.
+  Все экраны кликабельны и связаны между собой.</p>
+
+  <a class="start" href="app/login.html">Начать с экрана входа →</a>
+
+  <div class="cards">
+    <a class="card" href="app/login.html"><div class="ic">➜</div><h2>Вход</h2><p>Hero-экран с формой входа и девизом продукта.</p></a>
+    <a class="card" href="app/register.html"><div class="ic">✚</div><h2>Регистрация</h2><p>Создание учётной записи: имя, логин, e-mail, пароль — дальше вход.</p></a>
+    <a class="card" href="app/dashboard.html"><div class="ic">▦</div><h2>Дашборд</h2><p>KPI-квадрат, структура кампаний, денежный поток по всем кампаниям, план против факта, таблица с фильтрами.</p></a>
+    <a class="card" href="app/campaigns.html"><div class="ic">✈</div><h2>Кампании</h2><p>Список всех кампаний: статусы, расход бюджета, ROI, фильтры по состоянию и платформе.</p></a>
+    <a class="card" href="app/campaign.html"><div class="ic">◎</div><h2>Кампания</h2><p>Параметры, выгрузки, график денежного потока, форма прогноза с результатом и экспортом.</p></a>
+    <a class="card" href="app/upload.html"><div class="ic">⬆</div><h2>Загрузка данных</h2><p>Drag&amp;drop зона, формат файла, история загрузок с построчными ошибками.</p></a>
+    <a class="card" href="app/forecasts.html"><div class="ic">⚖</div><h2>Прогнозы</h2><p>Создание прогноза по кампании, сравнение вариантов бюджета и история расчётов с экспортом.</p></a>
+    <a class="card" href="app/admin.html"><div class="ic">⚙</div><h2>Администрирование</h2><p>Отдельная область администратора: сводка ПО, пользователи, журнал действий, модели и обучение, резервные копии.</p></a>
+  </div>
+
+  <p class="note">Администратор и маркетолог видят разные области: у маркетолога нет пункта «Администрирование», у администратора нет бизнес-разделов.
+  Следующий шаг — векторные (SVG) версии для Figma, затем React + Vite.</p>
+</body>
+</html>

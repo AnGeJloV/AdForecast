@@ -41,8 +41,9 @@ public class UserController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAuthority('user.manage')")
-    public UserResponse create(@Valid @RequestBody CreateUserRequest request) {
-        return userService.create(request);
+    public UserResponse create(@Valid @RequestBody CreateUserRequest request, Authentication authentication) {
+        AuthPrincipal principal = (AuthPrincipal) authentication.getPrincipal();
+        return userService.create(request, principal.userId());
     }
 
     @PutMapping("/{id}")

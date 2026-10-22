@@ -29,6 +29,7 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -65,14 +66,11 @@ public class ForecastService {
         this.mlServiceClient = mlServiceClient;
     }
 
-    public ForecastResponse run(long campaignId, boolean admin, long userId, ForecastRequest request) {
+    public ForecastResponse run(long campaignId, long userId, ForecastRequest request) {
         Campaign campaign = campaignRepository.findWithAccount(campaignId)
                 .orElseThrow(() -> new EntityNotFoundException("кампания не найдена"));
-        if (!admin) {
-            campaignService.requireAccess(userId, campaignId);
-        }
-        MlModelInfo latest = latestModel();
-        MlModel model = ensureMlModel(latest);
+        campaignService.requireAccess(userId, campaignId);
+        MlModel model = activeModel();
 
         Forecast forecast = new Forecast();
         forecast.setCampaign(campaign);
@@ -92,7 +90,7 @@ public class ForecastService {
                     request.horizonDays(),
                     startMonth,
                     request.horizonDays(),
-                    latest.version()));
+                    model.getModelVersion()));
 
             ForecastParam param = new ForecastParam();
             param.setForecast(forecast);
@@ -108,7 +106,7 @@ public class ForecastService {
                     ? null
                     : BigDecimal.valueOf(prediction.paybackMonths()));
             result.setPaybackProbability(BigDecimal.valueOf(prediction.paybackProbability()));
-            result.setMape(BigDecimal.valueOf(latest.mape()));
+            result.setMape(model.getQualityMetric());
             forecastResultRepository.save(result);
 
             forecast.setStatus(ForecastStatus.COMPLETED);
@@ -117,7 +115,7 @@ public class ForecastService {
                     forecast.getId(),
                     forecast.getStatus().name(),
                     forecast.getStartedAt(),
-                    latest.version(),
+                    model.getModelVersion(),
                     request.horizonDays(),
                     request.confidenceLevel(),
                     request.useSeasonality(),
@@ -126,7 +124,7 @@ public class ForecastService {
                     prediction.paybackDays(),
                     prediction.paybackWithinHorizon(),
                     BigDecimal.valueOf(prediction.paybackProbability()),
-                    BigDecimal.valueOf(latest.mape())
+                    model.getQualityMetric()
             );
         } catch (MlServiceException exception) {
             forecast.setStatus(ForecastStatus.FAILED);
@@ -136,12 +134,10 @@ public class ForecastService {
     }
 
     @Transactional(readOnly = true)
-    public List<ForecastResponse> history(long campaignId, boolean admin, long userId) {
+    public List<ForecastResponse> history(long campaignId, long userId) {
         campaignRepository.findById(campaignId)
                 .orElseThrow(() -> new EntityNotFoundException("кампания не найдена"));
-        if (!admin) {
-            campaignService.requireAccess(userId, campaignId);
-        }
+        campaignService.requireAccess(userId, campaignId);
         return forecastRepository.findByCampaignIdOrderByStartedAtDesc(campaignId).stream()
                 .map(forecast -> {
                     ForecastParam param = forecastParamRepository.findByForecastId(forecast.getId()).orElse(null);
@@ -152,7 +148,7 @@ public class ForecastService {
     }
 
     public List<CompareResponse> compare(CompareRequest request) {
-        MlModelInfo latest = latestModel();
+        MlModel model = activeModel();
         Set<String> platforms = adAccountRepository.findAll().stream()
                 .map(AdAccount::getPlatform)
                 .collect(Collectors.toSet());
@@ -169,7 +165,7 @@ public class ForecastService {
                     variant.durationDays(),
                     variant.startMonth(),
                     variant.durationDays(),
-                    latest.version()));
+                    model.getModelVersion()));
             responses.add(new CompareResponse(
                     variant.platform(),
                     variant.budget(),
@@ -184,24 +180,23 @@ public class ForecastService {
         return responses;
     }
 
-    private MlModelInfo latestModel() {
+    private MlModel activeModel() {
+        Optional<MlModel> active = mlModelRepository.findByIsActiveTrue();
+        if (active.isPresent()) {
+            return active.get();
+        }
         List<MlModelInfo> models = mlServiceClient.models();
         if (models.isEmpty()) {
             throw new MlServiceException("нет обученных моделей прогнозирования");
         }
-        return models.get(models.size() - 1);
-    }
-
-    private MlModel ensureMlModel(MlModelInfo info) {
-        return mlModelRepository.findByModelNameAndModelVersion(MODEL_NAME, info.version())
-                .orElseGet(() -> {
-                    MlModel model = new MlModel();
-                    model.setModelName(MODEL_NAME);
-                    model.setModelVersion(info.version());
-                    model.setTrainedAt(OffsetDateTime.parse(info.trainedAt()).toLocalDateTime());
-                    model.setQualityMetric(BigDecimal.valueOf(info.mape()));
-                    return mlModelRepository.save(model);
-                });
+        MlModelInfo latest = models.get(models.size() - 1);
+        MlModel model = new MlModel();
+        model.setModelName(MODEL_NAME);
+        model.setModelVersion(latest.version());
+        model.setTrainedAt(OffsetDateTime.parse(latest.trainedAt()).toLocalDateTime());
+        model.setQualityMetric(BigDecimal.valueOf(latest.mape()));
+        model.setIsActive(true);
+        return mlModelRepository.save(model);
     }
 
     private ForecastResponse toHistoryItem(Forecast forecast, ForecastParam param, ForecastResult result) {
