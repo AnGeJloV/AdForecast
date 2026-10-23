@@ -3,7 +3,6 @@ import { useMemo, useState } from 'react'
 export interface SortColumn<T> {
   id: string
   title: string
-  /** Значение для сравнения: число — по величине, строка — по алфавиту. */
   value: (row: T) => string | number | null
 }
 
@@ -24,7 +23,6 @@ function compare(left: string | number, right: string | number): number {
   return String(left).localeCompare(String(right), 'ru', { numeric: true, sensitivity: 'base' })
 }
 
-/** Сортировка таблицы по клику на заголовок: возрастание → убывание → исходный порядок. */
 export function useSortTable<T>(source: T[], columns: SortColumn<T>[]): SortTable<T> {
   const [sort, setSort] = useState<{ id: string; direction: SortDirection } | null>(null)
 
@@ -60,7 +58,6 @@ export function useSortTable<T>(source: T[], columns: SortColumn<T>[]): SortTabl
   }
 }
 
-/** Заголовок столбца, по клику сортирующий таблицу. */
 export function SortTh<T>({ table, column }: { table: SortTable<T>; column: SortColumn<T> }) {
   const direction = table.directionOf(column.id)
   return (

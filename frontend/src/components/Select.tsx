@@ -15,7 +15,6 @@ interface SelectProps {
   disabled?: boolean
 }
 
-/** Границы ближайшего прокручиваемого контейнера (модалка и т. п.) — иначе список обрезается родителем. */
 function clippingBounds(node: HTMLElement): { top: number; bottom: number } {
   let current = node.parentElement
   while (current) {
@@ -29,7 +28,6 @@ function clippingBounds(node: HTMLElement): { top: number; bottom: number } {
   return { top: 0, bottom: window.innerHeight }
 }
 
-/** Выпадающий список в теме приложения: нативное меню <select> рисует ОС и не поддаётся оформлению. */
 export function Select({ value, options, onChange, placeholder = 'не выбрано', variant = 'field', disabled }: SelectProps) {
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)

@@ -13,10 +13,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/**
- * Просмотр кампании из админ-области: администратор не ведёт кампании и не имеет к ним доступа
- * как маркетолог, но ему нужно видеть, что за кампания попадает в обучение и что упоминается в журнале.
- */
 @RestController
 @RequestMapping("/api/admin/campaigns")
 public class AdminCampaignController {

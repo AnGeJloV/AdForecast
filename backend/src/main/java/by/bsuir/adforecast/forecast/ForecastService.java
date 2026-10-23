@@ -159,7 +159,7 @@ public class ForecastService {
         return historyOf(campaignId);
     }
 
-    /** История прогнозов для админского просмотра: без проверки владения, доступ даёт контроллер. */
+    /** Без проверки владения: доступ ограничивает админский контроллер. */
     @Transactional(readOnly = true)
     public List<ForecastResponse> historyForInspection(long campaignId) {
         campaignRepository.findById(campaignId)

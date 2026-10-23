@@ -642,7 +642,6 @@ function AuditTab({ onOpenCampaign }: { onOpenCampaign: (id: number) => void }) 
   )
 }
 
-/** Название кампании в админских таблицах: открывает просмотр её данных (только чтение). */
 function CampaignLink({ id, name, onOpen }: { id: number; name: string; onOpen: (id: number) => void }) {
   return (
     <button type="button" className="camp-link" onClick={() => onOpen(id)} title="Посмотреть данные кампании">
@@ -674,7 +673,6 @@ function MiniTrend({ metrics }: { metrics: DailyMetricPoint[] }) {
   )
 }
 
-/** Просмотр кампании из админ-области: только чтение, без перехода на бизнес-экраны. */
 function CampaignInsightModal({ campaignId, onClose }: { campaignId: number | null; onClose: () => void }) {
   const [insight, setInsight] = useState<AdminCampaignInsight | null>(null)
   const [error, setError] = useState('')

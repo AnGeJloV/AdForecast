@@ -14,7 +14,6 @@ import { fmtMoney, fmtNum, fmtRatio, paybackLabel, paybackTone, plural, rangeLab
 const PAGE_SIZE = 10
 type StatusFilter = 'all' | 'ACTIVE' | 'FINISHED' | 'PLANNED'
 
-/** Подпись состояния так же, как она выглядит в таблице — по ней же и фильтруем. */
 function stateLabel(campaign: CampaignSummary): string {
   if (campaign.status === 'PLANNED') {
     return 'планируется'

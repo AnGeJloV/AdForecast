@@ -58,7 +58,7 @@ public class CampaignService {
         return buildDetail(campaignId);
     }
 
-    /** Просмотр кампании из админ-области: без проверки владения, доступ даёт контроллер. */
+    /** Без проверки владения: доступ ограничивает админский контроллер. */
     @Transactional(readOnly = true)
     public CampaignDetailResponse inspect(long campaignId) {
         return buildDetail(campaignId);
@@ -109,6 +109,8 @@ public class CampaignService {
         campaign.setBudget(request.budget());
         campaign.setCurrency(request.currency());
         campaign.setStatus(CampaignStatus.PLANNED);
+        campaign.setInTraining(true);
+        campaign.setIsTest(false);
         campaign.setCreatedAt(LocalDateTime.now());
         campaign = campaignRepository.save(campaign);
 

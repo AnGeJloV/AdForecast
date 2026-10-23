@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
-/** Стек открытых окон: Escape должен закрывать только верхнее, иначе вместе с ним закроется и то, из которого его открыли. */
 const openStack: object[] = []
 
 interface ModalProps {
@@ -42,8 +41,6 @@ export function Modal({ open, onClose, title, subtitle, wide, children }: ModalP
     return null
   }
 
-  // Портал: внутри <main> (position: relative; z-index: 1) модалка заперта в его контексте
-  // наложения, поэтому парящая навигация с z-index 50 рисовалась поверх неё.
   return createPortal(
     <div
       className={`modal-overlay open${wide ? ' wide-overlay' : ''}`}
