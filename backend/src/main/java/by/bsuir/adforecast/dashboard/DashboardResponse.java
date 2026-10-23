@@ -16,9 +16,21 @@ public record DashboardResponse(
         long unprofitableCampaigns,
         long forecastsTotal,
         long forecastsCompleted,
+        List<ChannelRow> channels,
         List<PlanFactRow> planVsFact,
         BigDecimal planVsFactAvgDeviation
 ) {
+
+    public record ChannelRow(
+            String platform,
+            long finishedCampaigns,
+            BigDecimal totalCost,
+            BigDecimal totalRevenue,
+            BigDecimal avgRoi,
+            long profitable,
+            long unprofitable
+    ) {
+    }
 
     public record PlanFactRow(
             long campaignId,
@@ -29,7 +41,7 @@ public record DashboardResponse(
             BigDecimal forecastRoi,
             BigDecimal deviation,
             long days,
-            long horizon,
+            long durationDays,
             boolean comparable
     ) {
     }

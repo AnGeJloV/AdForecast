@@ -1,9 +1,11 @@
 package by.bsuir.adforecast.campaign;
 
+import by.bsuir.adforecast.audit.AuditService;
 import by.bsuir.adforecast.domain.AdAccount;
 import by.bsuir.adforecast.domain.Campaign;
 import by.bsuir.adforecast.domain.CampaignAccess;
 import by.bsuir.adforecast.domain.CampaignStatus;
+import by.bsuir.adforecast.forecast.CurrencyRates;
 import by.bsuir.adforecast.repo.AdAccountRepository;
 import by.bsuir.adforecast.repo.CampaignAccessRepository;
 import by.bsuir.adforecast.repo.CampaignRepository;
@@ -14,7 +16,10 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -33,17 +38,20 @@ public class CampaignService {
     private final CampaignAccessRepository campaignAccessRepository;
     private final AdAccountRepository adAccountRepository;
     private final UserRepository userRepository;
+    private final AuditService auditService;
     private final JdbcTemplate jdbcTemplate;
 
     public CampaignService(CampaignRepository campaignRepository,
                            CampaignAccessRepository campaignAccessRepository,
                            AdAccountRepository adAccountRepository,
                            UserRepository userRepository,
+                           AuditService auditService,
                            JdbcTemplate jdbcTemplate) {
         this.campaignRepository = campaignRepository;
         this.campaignAccessRepository = campaignAccessRepository;
         this.adAccountRepository = adAccountRepository;
         this.userRepository = userRepository;
+        this.auditService = auditService;
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -95,16 +103,18 @@ public class CampaignService {
                 stats == null ? 0L : stats.getForecastCount(),
                 stats == null ? null : stats.getLastForecastAt(),
                 stats == null ? null : stats.getLatestForecastRoi(),
-                stats == null ? null : stats.getLatestPaybackMonths(),
-                stats == null ? null : stats.getLatestPaybackProbability()
+                stats == null ? null : stats.getLatestPaybackRatio(),
+                stats == null ? null : stats.getLatestVerdict()
         );
     }
 
     public CampaignSummaryResponse create(long userId, CampaignCreateRequest request) {
         AdAccount account = adAccountRepository.findById(request.accountId())
                 .orElseThrow(() -> new EntityNotFoundException("рекламный кабинет не найден"));
+        requireSupportedCurrency(request.currency());
         Campaign campaign = new Campaign();
         campaign.setAccount(account);
+        campaign.setOrganization(account.getOrganization());
         campaign.setCampaignName(request.campaignName());
         campaign.setBudget(request.budget());
         campaign.setCurrency(request.currency());
@@ -119,6 +129,10 @@ public class CampaignService {
         access.setCampaign(campaign);
         campaignAccessRepository.save(access);
 
+        auditService.record(userId, "создание кампании", "кампания", campaign.getId(),
+                "«" + campaign.getCampaignName() + "», " + account.getPlatform()
+                        + ", бюджет " + campaign.getBudget().toPlainString() + " " + campaign.getCurrency()
+                        + ", статус «планируется»");
         return findSummary(campaign.getId());
     }
 
@@ -126,12 +140,67 @@ public class CampaignService {
         Campaign campaign = campaignRepository.findById(campaignId)
                 .orElseThrow(() -> new EntityNotFoundException("кампания не найдена"));
         requireAccess(userId, campaignId);
+        requireSupportedCurrency(request.currency());
+        String previousName = campaign.getCampaignName();
+        BigDecimal previousBudget = campaign.getBudget();
+        String previousCurrency = campaign.getCurrency();
+        CampaignStatus previousStatus = campaign.getStatus();
+
         campaign.setCampaignName(request.campaignName());
         campaign.setBudget(request.budget());
         campaign.setCurrency(request.currency());
         campaign.setStatus(request.status());
         campaignRepository.save(campaign);
+
+        List<String> changes = new ArrayList<>();
+        if (!previousName.equals(request.campaignName())) {
+            changes.add("название «" + previousName + "» → «" + request.campaignName() + "»");
+        }
+        if (previousBudget.compareTo(request.budget()) != 0) {
+            changes.add("бюджет " + previousBudget.toPlainString() + " → " + request.budget().toPlainString()
+                    + " " + request.currency());
+        }
+        if (!previousCurrency.equals(request.currency())) {
+            changes.add("валюта " + previousCurrency + " → " + request.currency());
+        }
+        if (previousStatus != request.status()) {
+            changes.add("статус «" + statusLabel(previousStatus) + "» → «" + statusLabel(request.status()) + "»");
+        }
+        if (!changes.isEmpty()) {
+            auditService.record(userId, "изменение кампании", "кампания", campaignId,
+                    "«" + request.campaignName() + "»: " + String.join(", ", changes));
+        }
+        if (previousStatus != CampaignStatus.FINISHED && request.status() == CampaignStatus.FINISHED) {
+            CampaignSummaryResponse summary = findSummary(campaignId);
+            String roi = summary.actualRoi() == null
+                    ? ""
+                    : ", окупаемость " + ratioText(summary.actualRoi());
+            auditService.record(userId, "завершение кампании", "кампания", campaignId,
+                    "«" + request.campaignName() + "»: расход " + summary.totalCost().toPlainString()
+                            + ", доход " + summary.totalRevenue().toPlainString() + roi);
+        }
         return findSummary(campaignId);
+    }
+
+    /** Модель считает в BYN, курсы НБРБ известны только для этих валют. */
+    private static void requireSupportedCurrency(String currency) {
+        if (!CurrencyRates.isSupported(currency)) {
+            throw new IllegalArgumentException("валюта «" + currency + "» не поддерживается — доступны "
+                    + String.join(", ", CurrencyRates.supported()));
+        }
+    }
+
+    private static String statusLabel(CampaignStatus status) {
+        return switch (status) {
+            case PLANNED -> "планируется";
+            case ACTIVE -> "активна";
+            case FINISHED -> "завершена";
+        };
+    }
+
+    /** Фактическая окупаемость из процентов API в вид «1,24 на каждый вложенный». */
+    private static String ratioText(BigDecimal roiPercent) {
+        return BigDecimal.ONE.add(roiPercent.movePointLeft(2)).setScale(2, RoundingMode.HALF_UP).toPlainString();
     }
 
     @Transactional(readOnly = true)

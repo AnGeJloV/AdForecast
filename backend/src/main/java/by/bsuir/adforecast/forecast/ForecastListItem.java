@@ -9,11 +9,13 @@ public record ForecastListItem(
         String campaignName,
         LocalDateTime startedAt,
         String status,
-        String modelVersion,
-        Integer horizonDays,
+        String verdict,
+        BigDecimal paybackRatio,
         BigDecimal forecastRoi,
+        BigDecimal intervalLower,
+        BigDecimal intervalUpper,
+        Integer durationDays,
         BigDecimal paybackMonths,
-        BigDecimal paybackProbability,
         BigDecimal mape
 ) {
 }

@@ -6,8 +6,20 @@ import { Layout } from '../components/Layout'
 import { Donut, WeeklyBars } from '../components/Charts'
 import { SortTh, useSortTable } from '../components/SortableTable'
 import type { SortColumn } from '../components/SortableTable'
-import { EmptyState, ErrorBox, PageLoader, Pager, ProbBar, StatusPill } from '../components/Ui'
-import { fmtDecimal, fmtMoney, fmtNum, fmtRatio, fmtDays, paybackLabel, paybackTone, rangeLabel, ratioValue } from '../utils/format'
+import { EmptyState, ErrorBox, PageLoader, Pager, StatusPill } from '../components/Ui'
+import {
+  fmtCoef,
+  fmtDecimal,
+  fmtMoney,
+  fmtNum,
+  fmtRatio,
+  paybackLabel,
+  paybackTone,
+  rangeLabel,
+  ratioValue,
+  verdictLabel,
+  verdictTone,
+} from '../utils/format'
 
 const PAGE_SIZE = 8
 const PLAN_FACT_PAGE_SIZE = 8
@@ -17,16 +29,18 @@ function campaignState(campaign: CampaignSummary): string {
   if (campaign.status === 'PLANNED') {
     return 'планируется'
   }
-  return paybackLabel(paybackTone(ratioValue(campaign.latestForecastRoi ?? campaign.actualRoi)))
+  if (campaign.latestVerdict) {
+    return verdictLabel(campaign.latestVerdict).toLowerCase()
+  }
+  return paybackLabel(paybackTone(ratioValue(campaign.actualRoi)))
 }
 
 const CAMPAIGN_COLUMNS: SortColumn<CampaignSummary>[] = [
   { id: 'name', title: 'Кампания', value: (row) => row.campaignName },
   { id: 'platform', title: 'Платформа', value: (row) => row.platform },
   { id: 'budget', title: 'Бюджет', value: (row) => row.budget },
-  { id: 'roi', title: 'ROI (прогноз)', value: (row) => row.latestForecastRoi ?? row.actualRoi },
-  { id: 'probability', title: 'Вероятность', value: (row) => row.latestPaybackProbability },
-  { id: 'payback', title: 'Срок', value: (row) => (row.latestPaybackMonths === null ? null : row.latestPaybackMonths * 30.44) },
+  { id: 'verdict', title: 'Прогноз', value: (row) => (row.latestVerdict === null ? null : verdictLabel(row.latestVerdict)) },
+  { id: 'coef', title: 'Коэффициент', value: (row) => row.latestPaybackRatio },
   { id: 'state', title: 'Статус', value: campaignState },
 ]
 
@@ -258,6 +272,48 @@ export function DashboardPage() {
         </div>
       </div>
 
+      {data.channels.length > 0 && (
+        <div className="card table-card" style={{ marginTop: 18 }}>
+          <div className="card-head">
+            <div>
+              <h2>Что окупается по факту</h2>
+              <div className="csub">ваш опыт по завершённым кампаниям — куда деньги возвращаются, а куда нет</div>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Канал</th>
+                <th>Завершённых</th>
+                <th>Окупаемых</th>
+                <th>Средний ROI</th>
+                <th>Вложено</th>
+                <th>Вернулось</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.channels.map((channel) => (
+                <tr key={channel.platform}>
+                  <td>{channel.platform}</td>
+                  <td className="mono">{fmtNum(channel.finishedCampaigns)}</td>
+                  <td className="mono">
+                    {fmtNum(channel.profitable)}
+                    <span className="ch-share">
+                      {' '}{Math.round(channel.finishedCampaigns > 0 ? (channel.profitable / channel.finishedCampaigns) * 100 : 0)} %
+                    </span>
+                  </td>
+                  <td className="mono" style={{ fontWeight: 700, color: channel.avgRoi > 0 ? 'var(--ok)' : 'var(--bad)' }}>
+                    {fmtRatio(channel.avgRoi)}
+                  </td>
+                  <td className="mono">{fmtMoney(channel.totalCost, currency)}</td>
+                  <td className="mono">{fmtMoney(channel.totalRevenue, currency)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <div className="card table-card">
         <div className="card-head">
           <div>
@@ -295,18 +351,24 @@ export function DashboardPage() {
               </thead>
               <tbody>
                 {pageRows.map((campaign) => {
-                  const roi = campaign.latestForecastRoi ?? campaign.actualRoi
-                  const tone = campaign.status === 'PLANNED' ? null : paybackTone(ratioValue(roi))
+                  const tone = campaign.latestVerdict
+                    ? verdictTone(campaign.latestVerdict)
+                    : campaign.status === 'PLANNED'
+                      ? null
+                      : paybackTone(ratioValue(campaign.actualRoi))
                   return (
                     <tr key={campaign.id} className="clickable" onClick={() => navigate(`/campaigns/${campaign.id}`)}>
                       <td>{campaign.campaignName}</td>
                       <td>{campaign.platform}</td>
                       <td className="mono">{fmtMoney(campaign.budget, campaign.currency)}</td>
-                      <td className="mono" style={{ fontWeight: 700, color: tone ? `var(--${tone === 'ok' ? 'ok' : tone === 'mid' ? 'warn' : 'bad'})` : undefined }}>
-                        {fmtRatio(roi)}
+                      <td>
+                        {campaign.latestVerdict
+                          ? <StatusPill tone={tone} label={verdictLabel(campaign.latestVerdict).toLowerCase()} />
+                          : '—'}
                       </td>
-                      <td><ProbBar fraction={campaign.latestPaybackProbability} /></td>
-                      <td>{campaign.latestPaybackMonths !== null ? fmtDays(campaign.latestPaybackMonths * 30.44) : '—'}</td>
+                      <td className="mono" style={{ fontWeight: 700, color: tone ? `var(--${tone === 'ok' ? 'ok' : tone === 'mid' ? 'warn' : 'bad'})` : undefined }}>
+                        {fmtCoef(campaign.latestPaybackRatio)}
+                      </td>
                       <td>
                         {campaign.status === 'PLANNED'
                           ? <StatusPill tone="plan" label="планируется" />
@@ -329,7 +391,7 @@ export function DashboardPage() {
 
 function DeviationPill({ deviation, comparable }: { deviation: number | null; comparable: boolean }) {
   if (!comparable || deviation === null) {
-    return <span className="pill plan" title="период данных сильно отличается от горизонта прогноза">—</span>
+    return <span className="pill plan" title="период данных сильно отличается от длительности прогноза">—</span>
   }
   const abs = Math.abs(deviation)
   const tone = abs <= 5 ? 'ok' : abs <= 10 ? 'mid' : 'bad'

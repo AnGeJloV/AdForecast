@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -24,8 +25,9 @@ public class TrainingController {
 
     @GetMapping("/preview")
     @PreAuthorize("hasAuthority('models.manage')")
-    public TrainingPreviewResponse preview() {
-        return trainingService.preview();
+    public TrainingPreviewResponse preview(@RequestParam(name = "scope", defaultValue = "GENERAL") String scope,
+                                           @RequestParam(name = "organizationId", required = false) Long organizationId) {
+        return trainingService.preview(scope, organizationId);
     }
 
     @PutMapping("/campaigns/{id}/flags")

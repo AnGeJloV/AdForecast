@@ -41,7 +41,7 @@ public class AdminSummaryService {
     @Transactional(readOnly = true)
     public AdminSummaryResponse summary() {
         Map<String, Object> counts = jdbcTemplate.queryForMap(COUNTS_SQL);
-        MlModel active = mlModelRepository.findByIsActiveTrue().orElse(null);
+        MlModel active = mlModelRepository.findByOrganizationIdIsNullAndIsActiveTrue().orElse(null);
         boolean mlAvailable;
         try {
             mlServiceClient.models();

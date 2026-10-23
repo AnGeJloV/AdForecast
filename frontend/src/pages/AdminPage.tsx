@@ -8,6 +8,7 @@ import type {
   AdminSummary,
   AuditEntry,
   BackupEntry,
+  AdminModelsResponse,
   DailyMetricPoint,
   Page,
   RoleItem,
@@ -23,7 +24,7 @@ import { SortTh, useSortTable } from '../components/SortableTable'
 import type { SortColumn, SortTable } from '../components/SortableTable'
 import { Select } from '../components/Select'
 import { EmptyState, ErrorBox, PageLoader, Pager, StatusPill } from '../components/Ui'
-import { fmtDate, fmtDateTime, fmtDays, fmtDecimal, fmtMoney, fmtNum, fmtRatio, initials, plural, rangeLabel } from '../utils/format'
+import { fmtCoef, fmtDate, fmtDateTime, fmtDays, fmtDecimal, fmtMoney, fmtNum, fmtRatio, initials, plural, rangeLabel, verdictLabel, verdictTone } from '../utils/format'
 
 type Tab = 'summary' | 'users' | 'audit' | 'models' | 'backup'
 
@@ -749,15 +750,15 @@ function CampaignInsightModal({ campaignId, onClose }: { campaignId: number | nu
             : (
               <table>
                 <thead>
-                  <tr><th>Дата</th><th>Горизонт</th><th>ROI</th><th>Вероятность</th><th>Срок</th><th>Статус</th></tr>
+                  <tr><th>Дата</th><th>Длительность</th><th>Вердикт</th><th>Коэффициент</th><th>Срок</th><th>Статус</th></tr>
                 </thead>
                 <tbody>
                   {forecasts.map((forecast) => (
                     <tr key={forecast.id}>
                       <td className="mono">{fmtDateTime(forecast.startedAt)}</td>
-                      <td className="mono">{forecast.horizonDays === null ? '—' : `${fmtNum(forecast.horizonDays)} дн.`}</td>
-                      <td className="mono">{forecast.forecastRoi === null ? '—' : fmtRatio(forecast.forecastRoi)}</td>
-                      <td className="mono">{forecast.paybackProbability === null ? '—' : `${fmtNum(forecast.paybackProbability * 100)} %`}</td>
+                      <td className="mono">{forecast.durationDays === null ? '—' : `${fmtNum(forecast.durationDays)} дн.`}</td>
+                      <td>{forecast.verdict === null ? '—' : <StatusPill tone={verdictTone(forecast.verdict)} label={verdictLabel(forecast.verdict).toLowerCase()} />}</td>
+                      <td className="mono">{forecast.paybackRatio === null ? '—' : fmtCoef(forecast.paybackRatio)}</td>
                       <td>{forecast.paybackMonths === null ? '—' : fmtDays(forecast.paybackMonths * 30.44)}</td>
                       <td>
                         {forecast.status === 'COMPLETED' && <StatusPill tone="ok" label="готов" />}
@@ -819,14 +820,14 @@ function AuditTable({ entries, table, onOpenCampaign }: {
 /* ===================== МОДЕЛИ И ОБУЧЕНИЕ ===================== */
 
 function ModelsTab({ onOpenCampaign }: { onOpenCampaign: (id: number) => void }) {
-  const [models, setModels] = useState<AdminModel[] | null>(null)
+  const [data, setData] = useState<AdminModelsResponse | null>(null)
   const [error, setError] = useState('')
   const [trainOpen, setTrainOpen] = useState(false)
   const [busyId, setBusyId] = useState<number | null>(null)
 
   const load = useCallback(() => {
     api.adminModels()
-      .then(setModels)
+      .then(setData)
       .catch((cause) => setError(cause instanceof ApiError ? cause.message : 'не удалось загрузить модели'))
   }, [])
 
@@ -848,11 +849,12 @@ function ModelsTab({ onOpenCampaign }: { onOpenCampaign: (id: number) => void })
     }
   }
 
-  if (!models) {
+  if (!data) {
     return error ? <ErrorBox message={error} /> : <PageLoader />
   }
 
-  const active = models.find((model) => model.isActive)
+  const models = data.models
+  const activeGeneral = models.find((model) => model.isActive)
 
   return (
     <>
@@ -861,31 +863,43 @@ function ModelsTab({ onOpenCampaign }: { onOpenCampaign: (id: number) => void })
         <div className="card">
           <div className="card-head">
             <div>
-              <h2>Текущая модель</h2>
-              <div className="csub">активна для всех прогнозов</div>
+              <h2>Общая модель</h2>
+              <div className="csub">используется всеми организациями и как запасная</div>
             </div>
-            {active && <span className="pill cur">{active.version}</span>}
+            {activeGeneral && <span className="pill cur">{activeGeneral.version}</span>}
           </div>
-          {active
+          {activeGeneral
             ? (
               <table style={{ fontSize: 13.5 }}>
                 <tbody>
                   <tr><td style={{ color: 'var(--muted)' }}>Алгоритм</td><td><b>CatBoost, ансамбль из 10</b></td></tr>
                   <tr>
-                    <td style={{ color: 'var(--muted)' }}>MAPE</td>
-                    <td><b>{fmtDecimal(active.mape)} %</b> <span style={{ color: 'var(--ok)', fontSize: 12 }}>(норма ≤ 15 %)</span></td>
+                    <td style={{ color: 'var(--muted)' }}>MAPE (всего / с историей)</td>
+                    <td>
+                      <b>{fmtDecimal(activeGeneral.mape)} %</b>
+                      {activeGeneral.mapeWithHistory !== null && <> / <b>{fmtDecimal(activeGeneral.mapeWithHistory)} %</b></>}
+                      {' '}<span style={{ color: 'var(--ok)', fontSize: 12 }}>(норма ≤ 15 %)</span>
+                    </td>
                   </tr>
-                  <tr><td style={{ color: 'var(--muted)' }}>Обучена на</td><td><b>{active.snapshot ? `${fmtNum(active.snapshot.campaignIds.length)} кампаниях` : '—'}</b></td></tr>
-                  <tr><td style={{ color: 'var(--muted)' }}>Дата обучения</td><td><b>{fmtDateTime(active.trainedAt)}</b></td></tr>
-                  {active.snapshot && (
-                    <tr><td style={{ color: 'var(--muted)' }}>Снимок выборки</td><td><b title={active.snapshot.hash}>SHA-256 · {active.snapshot.hash.slice(0, 12)}…</b></td></tr>
+                  <tr><td style={{ color: 'var(--muted)' }}>Обучена на</td><td><b>{activeGeneral.snapshot ? `${fmtNum(activeGeneral.snapshot.campaignIds.length)} кампаниях` : '—'}</b></td></tr>
+                  <tr><td style={{ color: 'var(--muted)' }}>Дата обучения</td><td><b>{fmtDateTime(activeGeneral.trainedAt)}</b></td></tr>
+                  {activeGeneral.snapshot && (
+                    <tr><td style={{ color: 'var(--muted)' }}>Снимок выборки</td><td><b title={activeGeneral.snapshot.hash}>SHA-256 · {activeGeneral.snapshot.hash.slice(0, 12)}…</b></td></tr>
                   )}
                 </tbody>
               </table>
               )
             : <EmptyState>активной версии нет</EmptyState>}
+          <div className="note-card">
+            💡
+            <span>
+              Модели организаций ({fmtNum(data.organizationsWithOwnModel)} из {fmtNum(data.organizationsTotal)})
+              обучаются и обновляются автоматически при появлении новых завершённых кампаний —
+              вмешательство администратора не требуется.
+            </span>
+          </div>
           <button className="cta" style={{ width: '100%', marginTop: 16 }} onClick={() => setTrainOpen(true)}>
-            ⟳ Обучить заново
+            ⟳ Обучить общую модель
           </button>
           <div className="csub" style={{ textAlign: 'center', marginTop: 9 }}>шаг 1 из 2 — открыть окно проверки состава выборки</div>
         </div>
@@ -908,7 +922,9 @@ function ModelsTab({ onOpenCampaign }: { onOpenCampaign: (id: number) => void })
                   {models.map((model) => (
                     <tr key={model.modelId}>
                       <td className="mono"><b>{model.version}</b></td>
-                      <td className="mono">{fmtDecimal(model.mape)} %</td>
+                      <td className="mono" title={model.mapeWithHistory !== null ? `с историей ${fmtDecimal(model.mapeWithHistory)} %` : undefined}>
+                        {fmtDecimal(model.mape)} %
+                      </td>
                       <td className="mono">{model.snapshot ? fmtNum(model.snapshot.campaignIds.length) : '—'}</td>
                       <td className="mono">{fmtDate(model.trainedAt)}</td>
                       <td>
@@ -977,7 +993,6 @@ function TrainingModal({ open, onClose, onTrained, onOpenCampaign }: {
     if (!open) {
       return
     }
-    setPreview(null)
     setChanges(new Map())
     setReason('')
     setSearch('')
@@ -1183,8 +1198,11 @@ function TrainingModal({ open, onClose, onTrained, onOpenCampaign }: {
           )}
           {phase === 'done' && resultModel && (
             <div className="success-box" style={{ marginTop: 14 }}>
-              Обучение завершено: версия <b>{resultModel.version}</b>, MAPE {fmtDecimal(resultModel.mape)} %, R² {fmtDecimal(resultModel.r2)},
-              кампаний в выборке {fmtNum(resultModel.campaignCount)}. Новая версия активна для всех прогнозов.
+              Обучение завершено: версия <b>{resultModel.version}</b>,
+              MAPE {fmtDecimal(resultModel.mape)} %, R² {fmtDecimal(resultModel.r2)}
+              {resultModel.mapeWithHistory !== null && <>; для кампаний с историей MAPE {fmtDecimal(resultModel.mapeWithHistory)} %</>}
+              {resultModel.mapePlanned !== null && <>, для планируемых {fmtDecimal(resultModel.mapePlanned)} %</>},
+              кампаний в выборке {fmtNum(resultModel.campaignCount)}. Новая версия общей модели активна для всех прогнозов.
             </div>
           )}
           {phase === 'done' && task?.status === 'FAILED' && (

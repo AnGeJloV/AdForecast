@@ -49,8 +49,10 @@ public class ForecastController {
 
     @PostMapping("/api/forecasts/compare")
     @PreAuthorize("hasAuthority('forecast.run')")
-    public List<CompareResponse> compare(@Valid @RequestBody CompareRequest request) {
-        return forecastService.compare(request);
+    public List<CompareResponse> compare(@Valid @RequestBody CompareRequest request,
+                                        Authentication authentication) {
+        AuthPrincipal principal = (AuthPrincipal) authentication.getPrincipal();
+        return forecastService.compare(principal.userId(), request);
     }
 
 }

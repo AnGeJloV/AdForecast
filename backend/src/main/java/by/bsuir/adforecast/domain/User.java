@@ -29,6 +29,10 @@ public class User {
     @JoinColumn(name = "role_id")
     private Role role;
 
+    @ManyToOne(fetch = FetchType.EAGER, optional = false)
+    @JoinColumn(name = "organization_id")
+    private Organization organization;
+
     @Column(nullable = false, unique = true)
     private String login;
 

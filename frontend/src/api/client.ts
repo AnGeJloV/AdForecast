@@ -1,7 +1,6 @@
 import type {
   AdAccount,
   AdminCampaignInsight,
-  AdminModel,
   AdminSummary,
   AnalyzeResponse,
   AuditEntry,
@@ -19,8 +18,10 @@ import type {
   ForecastListItem,
   ForecastRequest,
   ForecastResult,
+  AdminModelsResponse,
   LoginResponse,
   Page,
+  PlatformInfo,
   RegisterRequest,
   RoleItem,
   TrainingPreview,
@@ -158,6 +159,9 @@ export const api = {
     request<CampaignSummary>(`/api/campaigns/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   campaignMetrics: (id: number) => request<DailyMetricPoint[]>(`/api/campaigns/${id}/metrics`),
   adAccounts: () => request<AdAccount[]>('/api/ad-accounts'),
+  adPlatforms: () => request<PlatformInfo[]>('/api/ad-accounts/platforms'),
+  addAdAccount: (data: { accountName: string; platform: string }) =>
+    request<AdAccount>('/api/ad-accounts', { method: 'POST', body: JSON.stringify(data) }),
 
   dashboard: () => request<DashboardData>('/api/dashboard'),
   cashflow: (weeks: number) => request<CashflowPoint[]>(`/api/dashboard/cashflow?weeks=${weeks}`),
@@ -200,7 +204,7 @@ export const api = {
       + `&search=${encodeURIComponent(search)}&sort=${encodeURIComponent(sort)}&direction=${direction}`,
     ),
   logout: () => request<void>('/api/auth/logout', { method: 'POST' }),
-  adminModels: () => request<AdminModel[]>('/api/admin/models'),
+  adminModels: () => request<AdminModelsResponse>('/api/admin/models'),
   activateModel: (modelId: number) =>
     request<void>(`/api/admin/models/${modelId}/activate`, { method: 'POST' }),
   backups: () => request<BackupEntry[]>('/api/admin/backups'),

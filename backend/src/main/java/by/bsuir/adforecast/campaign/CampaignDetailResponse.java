@@ -22,7 +22,7 @@ public record CampaignDetailResponse(
         Long forecastCount,
         LocalDateTime lastForecastAt,
         BigDecimal latestForecastRoi,
-        BigDecimal latestPaybackMonths,
-        BigDecimal latestPaybackProbability
+        BigDecimal latestPaybackRatio,
+        String latestVerdict
 ) {
 }

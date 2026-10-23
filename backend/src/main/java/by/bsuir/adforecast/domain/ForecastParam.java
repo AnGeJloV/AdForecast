@@ -29,8 +29,20 @@ public class ForecastParam {
     @JoinColumn(name = "forecast_id", unique = true)
     private Forecast forecast;
 
-    @Column(name = "horizon_days", nullable = false)
-    private Integer horizonDays;
+    @Column(name = "duration_days", nullable = false)
+    private Integer durationDays;
+
+    @Column(name = "start_month")
+    private Integer startMonth;
+
+    @Column(name = "hist_days", nullable = false)
+    private Integer histDays;
+
+    @Column(name = "hist_cost")
+    private BigDecimal histCost;
+
+    @Column(name = "hist_revenue")
+    private BigDecimal histRevenue;
 
     @Column(name = "confidence_level", nullable = false)
     private BigDecimal confidenceLevel;

@@ -8,4 +8,6 @@ import java.util.List;
 public interface AdAccountRepository extends JpaRepository<AdAccount, Long> {
 
     List<AdAccount> findAllByOrderByIdAsc();
+
+    List<AdAccount> findByOrganizationIdOrderByIdAsc(Long organizationId);
 }

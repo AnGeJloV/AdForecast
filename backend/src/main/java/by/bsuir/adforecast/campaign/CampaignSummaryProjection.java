@@ -34,5 +34,7 @@ public interface CampaignSummaryProjection {
 
     BigDecimal getLatestPaybackMonths();
 
-    BigDecimal getLatestPaybackProbability();
+    BigDecimal getLatestPaybackRatio();
+
+    String getLatestVerdict();
 }

@@ -17,8 +17,8 @@ public record CampaignSummaryResponse(
         Long totalImpressions,
         Long totalClicks,
         BigDecimal latestForecastRoi,
-        BigDecimal latestPaybackMonths,
-        BigDecimal latestPaybackProbability
+        BigDecimal latestPaybackRatio,
+        String latestVerdict
 ) {
 
     public static CampaignSummaryResponse from(CampaignSummaryProjection projection) {
@@ -37,8 +37,8 @@ public record CampaignSummaryResponse(
                 projection.getTotalImpressions(),
                 projection.getTotalClicks(),
                 projection.getLatestForecastRoi(),
-                projection.getLatestPaybackMonths(),
-                projection.getLatestPaybackProbability()
+                projection.getLatestPaybackRatio(),
+                projection.getLatestVerdict()
         );
     }
 }

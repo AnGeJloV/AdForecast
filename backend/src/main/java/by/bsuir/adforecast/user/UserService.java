@@ -3,6 +3,7 @@ package by.bsuir.adforecast.user;
 import by.bsuir.adforecast.audit.AuditService;
 import by.bsuir.adforecast.domain.Role;
 import by.bsuir.adforecast.domain.User;
+import by.bsuir.adforecast.organization.OrganizationService;
 import by.bsuir.adforecast.repo.RoleRepository;
 import by.bsuir.adforecast.repo.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
@@ -20,15 +21,18 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
+    private final OrganizationService organizationService;
     private final PasswordEncoder passwordEncoder;
     private final AuditService auditService;
 
     public UserService(UserRepository userRepository,
                        RoleRepository roleRepository,
+                       OrganizationService organizationService,
                        PasswordEncoder passwordEncoder,
                        AuditService auditService) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
+        this.organizationService = organizationService;
         this.passwordEncoder = passwordEncoder;
         this.auditService = auditService;
     }
@@ -60,6 +64,9 @@ public class UserService {
         user.setFullName(request.fullName());
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         user.setRole(role);
+        user.setOrganization(userRepository.findById(actorId)
+                .orElseThrow(() -> new EntityNotFoundException("создатель не найден"))
+                .getOrganization());
         user.setIsActive(true);
         User saved = userRepository.save(user);
         auditService.record(actorId, "создание пользователя", "пользователь", saved.getId(),
@@ -82,10 +89,13 @@ public class UserService {
         user.setFullName(request.fullName());
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         user.setRole(role);
+        // самостоятельная регистрация — новая компания: пустые данные, свои кабинеты
+        user.setOrganization(organizationService.createWithStandardAccounts(
+                "Организация «" + request.fullName().trim() + "»"));
         user.setIsActive(true);
         User saved = userRepository.save(user);
         auditService.record(saved.getId(), "регистрация", "пользователь", saved.getId(),
-                "логин " + saved.getLogin());
+                "логин " + saved.getLogin() + ", организация «" + saved.getOrganization().getName() + "»");
         return saved;
     }
 

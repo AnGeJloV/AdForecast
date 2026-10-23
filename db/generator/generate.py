@@ -1,3 +1,24 @@
+"""Генератор синтетических данных AdForecast.
+
+Экономика кампаний откалибрована по открытым реальным данным (см. realdata/README.md):
+Conjura MMM (93 eCommerce-организации, CC BY 4.0), реальные Facebook Ads анонимной
+организации, бенчмарки WordStream/LocaliQ, Triple Whale и click.ru.
+
+Принцип: итоговая окупаемость кампании определяется только теми характеристиками,
+которые доступны модели прогнозирования (канал, бюджет и дневной бюджет, длительность,
+месяц старта, история самой кампании) плюс небольшой скрытый шум (ниша, креативы,
+конкуренция). Это делает задачу прогнозирования содержательной и честной.
+
+Зависимости окупаемости:
+- канал: базовая экономика площадки (CPC, CTR, типичный ROAS);
+- дневной бюджет: насыщение отдачи (длинный хвост дешёвого трафика заканчивается)
+  и штраф малого бюджета (площадка не выходит из обучения);
+- длительность: выгорание аудитории на длинных кампаниях;
+- месяц старта: спрос по сезонам (пик ноябрь-декабрь, провал сентябрь);
+- день недели: внутринедельный ритм спроса;
+- шум кампании sigma=0.15 и дневной шум sigma=0.12.
+"""
+
 import argparse
 import csv
 import math
@@ -5,13 +26,29 @@ import random
 from datetime import date, timedelta
 from pathlib import Path
 
+# (название, тип, CTR, CPC в BYN, базовая окупаемость, гамма насыщения по бюджету, выгорание)
+#
+# CPC и CTR — из открытых источников на октябрь 2026 (см. realdata/README.md):
+#   Яндекс Директ: CPC поиска 40,3 ₽ = 1,46 BYN, сети 8,56 ₽ = 0,31 BYN (click.ru, Q2 2026)
+#   VK Реклама: 9,15 ₽ = 0,33 BYN, CTR 0,97 % (click.ru); myTarget: 20 ₽ = 0,73 BYN
+#   Google Ads: от 0,3 $ = 0,89 BYN в спокойных нишах Беларуси (topsite.by), CTR 6,3 % (MetricNexus)
+#   Telegram Ads: CPM ≈ 1 €; TikTok: CPC 0,62 $ = 1,84 BYN, CTR 1,12 % (MetricNexus)
+#   Kufar: баннер 12 BYN/1000 показов (belkaads) — при CTR 1,5 % это ≈ 0,80 BYN за клик
+# Курсы НБРБ 22.10.2026: 1 USD = 2,9713, 1 EUR = 3,3337, 100 RUB = 3,6254 BYN.
+#
+# Базовая окупаемость — типичный атрибутированный ROAS канала: ориентиры Triple Whale
+# и MetricNexus (Google 3,3–3,8, Meta 1,9–3,2, TikTok 2,1) снижены для малого и среднего
+# бизнеса Беларуси, где бюджет и объёмы заказов меньше.
 PLATFORMS = [
-    ("Яндекс Директ", "search", 0.040, 0.85, 1.00),
-    ("Google Ads", "search", 0.035, 0.95, 1.05),
-    ("VK Реклама", "social", 0.016, 0.40, 0.37),
-    ("myTarget", "social", 0.014, 0.45, 0.40),
-    ("Telegram Ads", "social", 0.012, 0.35, 0.27),
-    ("Email-платформа", "email", 0.250, 0.06, 0.09),
+    ("Яндекс Директ", "search", 0.055, 1.46, 1.60, 0.20, 0.30),
+    ("Яндекс Директ — сети", "social", 0.007, 0.31, 1.05, 0.22, 0.35),
+    ("Google Ads", "search", 0.063, 1.05, 1.70, 0.18, 0.28),
+    ("VK Реклама", "social", 0.0097, 0.33, 1.20, 0.22, 0.35),
+    ("myTarget", "social", 0.008, 0.73, 1.10, 0.22, 0.35),
+    ("Telegram Ads", "social", 0.010, 0.33, 0.95, 0.25, 0.40),
+    ("TikTok Ads", "social", 0.0112, 1.84, 1.00, 0.24, 0.42),
+    ("Kufar", "classified", 0.015, 0.80, 1.30, 0.20, 0.30),
+    ("Email-платформа", "email", 0.030, 0.02, 2.60, 0.15, 0.20),
 ]
 
 NICHES = [
@@ -25,9 +62,18 @@ NICHES = [
     "образование",
 ]
 
-WEEKDAY_FACTORS = [0.95, 1.05, 1.10, 1.05, 1.00, 0.90, 0.80]
-MONTH_FACTORS = [0.85, 0.85, 0.95, 1.00, 1.05, 0.95, 0.90, 0.90, 1.00, 1.10, 1.25, 1.30]
+# спрос по дням недели (пн..вс) — из Conjura MMM, среднее = 1.0
+WEEKDAY_FACTORS = [1.10, 1.04, 1.03, 0.98, 0.94, 0.81, 1.10]
 
+# спрос по месяцам — сглаженная сезонность Conjura MMM (пик Q4, провал сентября)
+_MONTH_RAW = [0.85, 0.80, 0.90, 0.95, 1.00, 0.90, 0.85, 0.85, 0.80, 0.95, 1.30, 1.50]
+_MONTH_MEAN = sum(_MONTH_RAW) / 12
+MONTH_FACTORS = [v / _MONTH_MEAN for v in _MONTH_RAW]
+
+# Кривая отдачи от дневного бюджета: пик в районе 150–300 BYN в день, ниже —
+# кампания не выходит из обучения у площадки, выше — начинается насыщение.
+REFERENCE_DAY_BUDGET = 300.0
+LEARNING_SCALE = 25.0
 HISTORY_START = date(2024, 3, 1)
 SQL_BATCH = 100
 
@@ -36,23 +82,57 @@ def lognormal(rng: random.Random, sigma: float) -> float:
     return math.exp(rng.gauss(0.0, sigma))
 
 
-def daily_row(rng: random.Random, platform: dict, day_budget: float, day: date, fatigue: float) -> tuple:
-    ctr = platform["ctr"] * lognormal(rng, 0.05)
-    cpc = platform["cpc"] * lognormal(rng, 0.05)
-    clicks = max(1, round(day_budget / cpc))
-    impressions = max(clicks, round(clicks / ctr))
-    cost = round(clicks * cpc, 2)
-    season = WEEKDAY_FACTORS[day.weekday()] * MONTH_FACTORS[day.month - 1] * fatigue
-    revenue = round(clicks * platform["rpc"] * season * lognormal(rng, 0.08), 2)
+def budget_efficiency(day_budget: float, gamma: float) -> float:
+    """Отдача от дневного бюджета: насыщение на больших бюджетах и штраф малого."""
+    saturation = (day_budget / REFERENCE_DAY_BUDGET) ** (-gamma)
+    learning = 1.0 - math.exp(-day_budget / LEARNING_SCALE)
+    return saturation * learning
+
+
+def fatigue_slope(duration: int, rate: float) -> float:
+    """Глубина падения отдачи к концу кампании (доля, 0 — нет выгорания)."""
+    ramp = min(1.0, max(0.0, (duration - 20) / 80))
+    return min(0.8, rate * ramp / 0.35)
+
+
+def fatigue_factor(day_index: int, duration: int, slope: float) -> float:
+    """Множитель отдачи в день day_index: линейное выгорание после 30 % кампании."""
+    if slope <= 0.0:
+        return 1.0
+    progress = max(0.0, (day_index - 0.3 * duration)) / (0.7 * duration)
+    return max(0.35, 1.0 - slope * progress)
+
+
+def daily_row(rng: random.Random, platform: tuple, day_budget: float, day: date,
+              day_index: int, duration: int, campaign_noise: float) -> tuple:
+    _, _, ctr, cpc, base_ratio, gamma, fatigue_rate = platform
+    cost_noise = lognormal(rng, 0.03)
+    ramp = min(1.0, (day_index + 1) / 3)
+    cost = round(day_budget * cost_noise * ramp, 2)
+    cost = max(cost, 0.5)
+    clicks = max(1, round(cost / cpc * lognormal(rng, 0.05)))
+    impressions = max(clicks, round(clicks / ctr * lognormal(rng, 0.05)))
+    slope = fatigue_slope(duration, fatigue_rate)
+    ratio_day = (
+        base_ratio
+        * budget_efficiency(day_budget, gamma)
+        * MONTH_FACTORS[day.month - 1]
+        * WEEKDAY_FACTORS[day.weekday()]
+        * fatigue_factor(day_index, duration, slope)
+        * campaign_noise
+        * lognormal(rng, 0.12)
+    )
+    revenue = round(cost * ratio_day, 2)
     return impressions, clicks, cost, max(revenue, 0.0)
 
 
 def campaign_timeline(rng: random.Random, status: str, today: date) -> tuple:
-    duration = rng.randint(14, 75)
+    duration = rng.randint(14, 100)
     if status == "PLANNED":
         return duration, None, None
     if status == "ACTIVE":
-        start = today - timedelta(days=rng.randint(duration // 2, max(duration // 2, 40)))
+        elapsed = rng.randint(7, max(8, duration - 7))
+        start = today - timedelta(days=elapsed)
         end = min(start + timedelta(days=duration - 1), today - timedelta(days=1))
     else:
         start = HISTORY_START + timedelta(days=rng.randint(0, (today - timedelta(days=90) - HISTORY_START).days))
@@ -60,38 +140,77 @@ def campaign_timeline(rng: random.Random, status: str, today: date) -> tuple:
     return duration, start, end
 
 
-def build_campaign(rng: random.Random, campaign_id: int, account_id: int, status: str, today: date, noise: float) -> dict:
+def build_campaign(rng: random.Random, campaign_id: int, account_id: int, status: str,
+                   today: date, noise: float) -> dict:
     platform = PLATFORMS[account_id - 1]
     duration, start, end = campaign_timeline(rng, status, today)
-    budget = round(rng.uniform(3000, 60000), 2)
+    # от 300 BYN — реальный минимум бюджета на систему в Беларуси (ECOM Digital, 2026)
+    budget = round(math.exp(rng.uniform(math.log(600), math.log(60000))), 2)
     day_budget = budget / duration
-    campaign_factor = lognormal(rng, noise)
+    campaign_noise = lognormal(rng, noise)
     niche = NICHES[rng.randrange(len(NICHES))]
     name = f"{platform[1]}_{niche}_{start.year if start else today.year}"
     metrics = []
     if start:
-        fatigue = 1.0
         for i in range((end - start).days + 1):
-            row = daily_row(
-                rng,
-                {"ctr": platform[2], "cpc": platform[3], "rpc": platform[4] * campaign_factor},
-                day_budget,
-                start + timedelta(days=i),
-                fatigue,
+            metrics.append(
+                daily_row(rng, platform, day_budget, start + timedelta(days=i),
+                          i, duration, campaign_noise)
             )
-            metrics.append(row)
-            if i > duration // 2:
-                fatigue = max(0.7, fatigue - 0.012)
     return {
         "campaign_id": campaign_id,
         "account_id": account_id,
         "name": name,
         "budget": budget,
+        "duration": duration,
         "status": status,
         "start": start,
         "end": end,
         "metrics": metrics,
     }
+
+
+def cutoff_records(campaign: dict) -> list:
+    """Обучающие записи «на отсечках»: состояние кампании в день k -> итог кампании.
+
+    Отсечка 0 соответствует планируемой кампании без истории. Итоговая окупаемость
+    считается по всем дням, признаки — только по дням до отсечки.
+    """
+    metrics = campaign["metrics"]
+    if not metrics:
+        return []
+    duration = campaign["duration"]
+    total_cost = sum(m[2] for m in metrics)
+    total_revenue = sum(m[3] for m in metrics)
+    if total_cost <= 0:
+        return []
+    target = total_revenue / total_cost
+    records = []
+    for fraction in (0.0, 0.3, 0.55, 0.8):
+        k = int(duration * fraction)
+        k = max(0, min(k, len(metrics)))
+        prefix = metrics[:k]
+        cost = sum(m[2] for m in prefix)
+        revenue = sum(m[3] for m in prefix)
+        week = prefix[-7:]
+        cost7 = sum(m[2] for m in week)
+        revenue7 = sum(m[3] for m in week)
+        records.append({
+            "campaign_id": campaign["campaign_id"],
+            "platform": PLATFORMS[campaign["account_id"] - 1][0],
+            "budget": campaign["budget"],
+            "duration_days": duration,
+            "start_month": campaign["start"].month,
+            "cutoff_days": k,
+            "has_history": 1 if k > 0 else 0,
+            "cost_to_date": round(cost, 2),
+            "revenue_to_date": round(revenue, 2),
+            "cost_last7": round(cost7, 2),
+            "revenue_last7": round(revenue7, 2),
+            "spent_fraction": round(cost / campaign["budget"], 4),
+            "target_ratio": round(target, 4),
+        })
+    return records
 
 
 def sql_literal(value) -> str:
@@ -116,13 +235,47 @@ def write_batches(out, table: str, columns: list, rows: list, seq: str) -> None:
     out.write("\n")
 
 
+def write_cutoffs(path: Path, records: list) -> None:
+    columns = ["campaign_id", "platform", "budget", "duration_days", "start_month",
+               "cutoff_days", "has_history", "cost_to_date", "revenue_to_date",
+               "cost_last7", "revenue_last7", "spent_fraction", "target_ratio"]
+    with path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=columns)
+        writer.writeheader()
+        writer.writerows(records)
+
+
+def summarize(campaigns: list) -> None:
+    by_platform = {}
+    for c in campaigns:
+        if not c["metrics"]:
+            continue
+        cost = sum(m[2] for m in c["metrics"])
+        revenue = sum(m[3] for m in c["metrics"])
+        if cost > 0:
+            name = PLATFORMS[c["account_id"] - 1][0]
+            by_platform.setdefault(name, []).append(revenue / cost)
+    print("Окупаемость по платформам (среднее / доля >= 1 / n):")
+    all_ratios = []
+    for name, ratios in by_platform.items():
+        profitable = sum(1 for r in ratios if r >= 1.0) / len(ratios)
+        mean = sum(ratios) / len(ratios)
+        all_ratios.extend(ratios)
+        print(f"  {name}: {mean:.2f} / {profitable:.0%} / {len(ratios)}")
+    all_ratios.sort()
+    n = len(all_ratios)
+    print(f"Итого: медиана {all_ratios[n // 2]:.2f}, "
+          f"p10 {all_ratios[int(0.1 * n)]:.2f}, p90 {all_ratios[min(n - 1, int(0.9 * n))]:.2f}, "
+          f"окупаемых {sum(1 for r in all_ratios if r >= 1.0) / n:.0%}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Генерация синтетических данных AdForecast")
     parser.add_argument("--campaigns", type=int, default=800, help="количество завершенных кампаний")
     parser.add_argument("--active", type=int, default=12, help="количество активных кампаний")
     parser.add_argument("--planned", type=int, default=8, help="количество планируемых кампаний")
     parser.add_argument("--exports", type=int, default=6, help="количество CSV-выгрузок рекламных кабинетов")
-    parser.add_argument("--noise", type=float, default=0.08, help="уровень шума ROI кампании")
+    parser.add_argument("--noise", type=float, default=0.15, help="скрытый шум окупаемости кампании (sigma)")
     parser.add_argument("--seed", type=int, default=42, help="зерно генератора")
     parser.add_argument("--outdir", type=Path, default=Path(__file__).parent, help="каталог результатов")
     args = parser.parse_args()
@@ -191,32 +344,32 @@ def main() -> None:
                       ["metric_id", "upload_id", "metric_date", "cost", "revenue", "impressions", "clicks"],
                       daily, "daily_metrics_metric_id_seq")
 
+    records = []
+    for campaign in campaigns:
+        records.extend(cutoff_records(campaign))
+    write_cutoffs(outdir / "cutoff_records.csv", records)
+
     for i in range(args.exports):
         platform = PLATFORMS[rng.randrange(len(PLATFORMS))]
         duration = rng.randint(21, 60)
         start = today - timedelta(days=rng.randint(30, 120))
-        day_budget = rng.uniform(150, 1200)
-        campaign_factor = lognormal(rng, args.noise)
+        day_budget = math.exp(rng.uniform(math.log(10), math.log(1500)))
+        campaign_noise = lognormal(rng, args.noise)
         csv_path = exports_dir / f"sample_upload_{i + 1}.csv"
         with csv_path.open("w", encoding="utf-8", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(["date", "impressions", "clicks", "cost", "revenue"])
-            fatigue = 1.0
             for day_i in range(duration):
                 impressions, clicks, cost, revenue = daily_row(
-                    rng,
-                    {"ctr": platform[2], "cpc": platform[3], "rpc": platform[4] * campaign_factor},
-                    day_budget,
-                    start + timedelta(days=day_i),
-                    fatigue,
+                    rng, platform, day_budget, start + timedelta(days=day_i),
+                    day_i, duration, campaign_noise,
                 )
                 writer.writerow([start + timedelta(days=day_i), impressions, clicks, cost, revenue])
-                if day_i > duration // 2:
-                    fatigue = max(0.7, fatigue - 0.012)
 
     print(f"Кампании: {len(campaigns)} (завершено {args.campaigns}, активных {args.active}, планируемых {args.planned})")
-    print(f"Выгрузки: {len(uploads)}, дневных показателей: {len(daily)}")
-    print(f"Результат: {outdir / 'seed_data.sql'}, выборки в {exports_dir}")
+    print(f"Выгрузки: {len(uploads)}, дневных показателей: {len(daily)}, записей отсечек: {len(records)}")
+    print(f"Результат: {outdir / 'seed_data.sql'}, выборки в {exports_dir}, отсечки в cutoff_records.csv")
+    summarize(campaigns)
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ import type {
   CampaignStatus,
   DailyMetricPoint,
   ForecastResult,
+  ModelScope,
   UploadItem,
 } from '../api/types'
 import { Layout } from '../components/Layout'
@@ -15,6 +16,7 @@ import { CashflowChart } from '../components/Charts'
 import { Select } from '../components/Select'
 import { EmptyState, ErrorBox, PageLoader, StatusPill } from '../components/Ui'
 import {
+  fmtCoef,
   fmtDate,
   fmtDateTime,
   fmtDays,
@@ -23,11 +25,15 @@ import {
   fmtNum,
   fmtPercent,
   fmtRatio,
+  fmtSigned,
   MONTHS,
   paybackLabel,
   paybackTone,
   plural,
   ratioValue,
+  scopeLabel,
+  verdictLabel,
+  verdictTone,
 } from '../utils/format'
 
 export function CampaignPage() {
@@ -40,6 +46,7 @@ export function CampaignPage() {
   const [lastForecast, setLastForecast] = useState<ForecastResult | null>(null)
   const [error, setError] = useState('')
   const [editOpen, setEditOpen] = useState(false)
+  const [finishOpen, setFinishOpen] = useState(false)
 
   const load = useCallback(() => {
     Promise.all([
@@ -66,8 +73,16 @@ export function CampaignPage() {
   const spent = campaign.budget > 0 ? Math.min((campaign.totalCost / campaign.budget) * 100, 100) : 0
   const ctr = campaign.totalImpressions > 0 ? (campaign.totalClicks / campaign.totalImpressions) * 100 : null
   const cpc = campaign.totalClicks > 0 ? campaign.totalCost / campaign.totalClicks : null
-  const roi = campaign.latestForecastRoi ?? campaign.actualRoi
-  const tone = campaign.status === 'PLANNED' ? null : paybackTone(ratioValue(roi))
+  const tone = campaign.latestVerdict
+    ? verdictTone(campaign.latestVerdict)
+    : campaign.status === 'PLANNED'
+      ? null
+      : paybackTone(ratioValue(campaign.actualRoi))
+  const pillLabel = campaign.latestVerdict
+    ? verdictLabel(campaign.latestVerdict).toLowerCase()
+    : campaign.status === 'PLANNED'
+      ? 'планируется'
+      : paybackLabel(tone)
 
   return (
     <Layout>
@@ -76,9 +91,10 @@ export function CampaignPage() {
         <div>
           <h1>
             {campaign.campaignName}
-            {campaign.status === 'PLANNED'
-              ? <StatusPill tone="plan" label="планируется" />
-              : <StatusPill tone={tone} label={paybackLabel(tone)} />}
+            {campaign.status !== 'FINISHED' && <StatusPill tone={tone} label={pillLabel} />}
+            {campaign.status === 'FINISHED' && (
+              <StatusPill tone={paybackTone(ratioValue(campaign.actualRoi))} label={paybackLabel(paybackTone(ratioValue(campaign.actualRoi)))} />
+            )}
           </h1>
           <div className="sub">
             {campaign.platform} · {campaign.accountName} · {campaign.daysCount > 0
@@ -87,6 +103,9 @@ export function CampaignPage() {
           </div>
         </div>
         <div className="actions">
+          {campaign.status !== 'FINISHED' && (
+            <button className="ghost-btn" onClick={() => setFinishOpen(true)}>Завершить кампанию</button>
+          )}
           <button className="ghost-btn" onClick={() => setEditOpen(true)}>Редактировать</button>
           <button className="ghost-btn" onClick={() => navigate(`/upload?campaign=${campaign.id}`)}>Загрузить выгрузку</button>
         </div>
@@ -149,11 +168,26 @@ export function CampaignPage() {
             <CashflowChart metrics={metrics} />
           </div>
 
-          <ForecastCard
-            campaign={campaign}
-            lastForecast={lastForecast}
-            onCompleted={(forecast) => setLastForecast(forecast)}
-          />
+          {campaign.status === 'FINISHED' ? (
+            <div className="card">
+              <div className="card-head">
+                <div>
+                  <h2>Окупаемость по факту</h2>
+                  <div className="csub">кампания завершена — прогноз не требуется</div>
+                </div>
+              </div>
+              <div className="fact-line">
+                Вложено {fmtMoney(campaign.totalCost, campaign.currency)}, получено {fmtMoney(campaign.totalRevenue, campaign.currency)}
+                {' — коэффициент '}{fmtCoef(campaign.totalCost > 0 ? campaign.totalRevenue / campaign.totalCost : null)}
+              </div>
+            </div>
+          ) : (
+            <ForecastCard
+              campaign={campaign}
+              lastForecast={lastForecast}
+              onCompleted={(forecast) => setLastForecast(forecast)}
+            />
+          )}
         </div>
       </div>
 
@@ -167,6 +201,17 @@ export function CampaignPage() {
           load()
         }}
       />
+
+      <FinishCampaignModal
+        open={finishOpen}
+        campaign={campaign}
+        onClose={() => setFinishOpen(false)}
+        onFinished={() => {
+          setFinishOpen(false)
+          setCampaign(null)
+          load()
+        }}
+      />
     </Layout>
   )
 }
@@ -176,16 +221,19 @@ function ForecastCard({ campaign, lastForecast, onCompleted }: {
   lastForecast: ForecastResult | null
   onCompleted: (forecast: ForecastResult) => void
 }) {
-  const [horizon, setHorizon] = useState('90')
+  const isPlanned = campaign.status === 'PLANNED'
+  const hasHistory = campaign.daysCount > 0
+  const defaultDuration = hasHistory ? campaign.daysCount + 30 : 90
+  const [duration, setDuration] = useState(String(defaultDuration))
   const [startMonth, setStartMonth] = useState(String(new Date().getMonth() + 1))
-  const [confidence, setConfidence] = useState('0.9')
-  const [seasonality, setSeasonality] = useState(true)
+  const [scope, setScope] = useState<ModelScope>('BLEND')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<ForecastResult | null>(lastForecast)
   const [exportError, setExportError] = useState('')
 
   useEffect(() => setResult(lastForecast), [lastForecast])
+  useEffect(() => setDuration(String(defaultDuration)), [defaultDuration])
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -193,18 +241,21 @@ function ForecastCard({ campaign, lastForecast, onCompleted }: {
       return
     }
     setError('')
-    const horizonValue = Number(horizon)
-    if (!Number.isInteger(horizonValue) || horizonValue < 1 || horizonValue > 730) {
-      setError('горизонт прогноза — целое число от 1 до 730 дней')
+    const durationValue = Number(duration)
+    if (!Number.isInteger(durationValue) || durationValue < 1 || durationValue > 365) {
+      setError('длительность кампании — целое число от 1 до 365 дней')
+      return
+    }
+    if (hasHistory && durationValue <= campaign.daysCount) {
+      setError(`кампания уже длится ${campaign.daysCount} ${plural(campaign.daysCount, ['день', 'дня', 'дней'])} — укажите полную длительность больше`)
       return
     }
     setBusy(true)
     try {
       const forecast = await api.runForecast(campaign.id, {
-        horizonDays: horizonValue,
-        confidenceLevel: Number(confidence),
-        useSeasonality: seasonality,
-        startMonth: Number(startMonth),
+        durationDays: durationValue,
+        startMonth: isPlanned ? Number(startMonth) : null,
+        modelScope: scope,
       })
       setResult(forecast)
       onCompleted(forecast)
@@ -227,54 +278,90 @@ function ForecastCard({ campaign, lastForecast, onCompleted }: {
     }
   }
 
-  const ratio = ratioValue(result?.forecastRoi ?? null)
-  const verdictTone = !result
-    ? null
-    : result.paybackWithinHorizon && (result.paybackProbability ?? 0) >= 0.5
-      ? 'ok'
-      : (result.paybackProbability ?? 0) >= 0.5
-        ? 'mid'
-        : 'bad'
+  const tone = verdictTone(result?.verdict ?? null)
+  const ratio = result?.paybackRatio ?? null
+  const currency = campaign.currency
+  const expectedReturn = result && ratio !== null ? campaign.budget * ratio : null
+  const intervalLower = result?.intervalLower ?? 0
+  const intervalUpper = result?.intervalUpper ?? intervalLower
+  const returnFrom = campaign.budget * intervalLower
+  const returnTo = campaign.budget * intervalUpper
+  const profit = result?.expectedProfit ?? null
+  const isWarning = result !== null
+    && (result.verdict === 'OUT_OF_RANGE' || result.verdict === 'BELOW_MINIMUM'
+      || result.verdict === 'NO_CHANNEL_DATA')
+
+  const scaleMax = Math.max(intervalUpper * 1.15, 1.25)
+  const lowerPct = Math.min(100, (intervalLower / scaleMax) * 100)
+  const widthPct = Math.min(100 - lowerPct, ((intervalUpper - intervalLower) / scaleMax) * 100)
+  const breakEvenPct = Math.min(100, (1 / scaleMax) * 100)
+
+  let advice = ''
+  if (result) {
+    const min = result.budgetMin
+    const max = result.budgetMax
+    const range = min !== null && max !== null
+      ? `от ${fmtMoney(min, currency)} до ${fmtMoney(max, currency)}`
+      : min !== null
+        ? `от ${fmtMoney(min, currency)} и выше`
+        : max !== null
+          ? `до ${fmtMoney(max, currency)}`
+          : null
+    if (range !== null) {
+      advice = result.verdict === 'UNPROFITABLE'
+        ? `Окно окупаемости по бюджету — ${range}: текущий бюджет ${fmtMoney(campaign.budget, currency)} вне него.`
+        : `Окупаемость сохраняется при бюджете ${range}.`
+    } else if (result.budgetAny) {
+      advice = 'Окупается при любом разумном бюджете — канал и месяц работают уверенно.'
+    } else {
+      advice = 'Окна окупаемости по бюджету нет при этом канале, месяце и длительности — сравните варианты в разделе «Прогнозы».'
+    }
+  }
 
   return (
     <div className="card">
       <div className="card-head">
         <div>
           <h2>Прогноз окупаемости</h2>
-          <div className="csub">параметры можно изменить и пересчитать</div>
+          <div className="csub">
+            {isPlanned
+              ? 'какой будет возврат средств, если запустить кампанию'
+              : 'каким будет итог кампании, если текущие темпы сохранятся'}
+          </div>
         </div>
       </div>
       <form onSubmit={submit}>
         <div className="form-row">
           <div className="field">
-            <label>Горизонт прогноза, дней</label>
-            <input inputMode="numeric" value={horizon} onChange={(event) => setHorizon(event.target.value)} />
+            <label>{isPlanned ? 'Длительность кампании, дней' : 'Всего продлится кампания, дней'}</label>
+            <input inputMode="numeric" value={duration} onChange={(event) => setDuration(event.target.value)} />
+            {hasHistory && (
+              <div className="hint">
+                уже есть данные за {campaign.daysCount} {plural(campaign.daysCount, ['день', 'дня', 'дней'])}
+              </div>
+            )}
           </div>
+          {isPlanned && (
+            <div className="field">
+              <label>Месяц старта</label>
+              <Select
+                value={startMonth}
+                options={MONTHS.map((name, index) => ({ value: String(index + 1), label: name }))}
+                onChange={setStartMonth}
+              />
+            </div>
+          )}
           <div className="field">
-            <label>Месяц старта</label>
+            <label>На чём основан прогноз</label>
             <Select
-              value={startMonth}
-              options={MONTHS.map((name, index) => ({ value: String(index + 1), label: name }))}
-              onChange={setStartMonth}
-            />
-          </div>
-          <div className="field">
-            <label>Доверительный уровень</label>
-            <Select
-              value={confidence}
+              value={scope}
               options={[
-                { value: '0.8', label: '80 %' },
-                { value: '0.9', label: '90 %' },
-                { value: '0.95', label: '95 %' },
+                { value: 'BLEND', label: 'Своя + общая (рекомендуется)' },
+                { value: 'OWN', label: 'Только свои данные' },
+                { value: 'GENERAL', label: 'Только общая модель' },
               ]}
-              onChange={setConfidence}
+              onChange={(next) => setScope(next as ModelScope)}
             />
-          </div>
-          <div className="field" style={{ flex: '0 0 auto' }}>
-            <label className="checkbox-row">
-              <input type="checkbox" className="chk" checked={seasonality} onChange={(event) => setSeasonality(event.target.checked)} />
-              учитывать сезонность
-            </label>
           </div>
           <div className="field" style={{ flex: '0 0 auto', display: 'flex', alignItems: 'flex-end' }}>
             <button className="cta" style={{ padding: '11px 22px' }} type="submit" disabled={busy}>
@@ -284,40 +371,112 @@ function ForecastCard({ campaign, lastForecast, onCompleted }: {
         </div>
       </form>
       {error && <div className="form-error" style={{ marginTop: 12 }}>{error}</div>}
+      {result && !isPlanned && (result.historyDays ?? 0) !== campaign.daysCount && (
+        <div className="stale-hint">
+          С момента расчёта появились новые данные: сейчас {campaign.daysCount}{' '}
+          {plural(campaign.daysCount, ['день', 'дня', 'дней'])} — пересчитайте прогноз.
+        </div>
+      )}
+      {result && String(result.durationDays) !== duration && (
+        <div className="stale-hint">
+          В форме указана длительность {duration} {plural(Number(duration), ['день', 'дня', 'дней'])}, а показанный
+          результат рассчитан на {result.durationDays} {plural(Number(result.durationDays ?? 0), ['день', 'дня', 'дней'])} —
+          нажмите «Рассчитать», чтобы пересчитать.
+        </div>
+      )}
 
-      {result && verdictTone && (
-        <div className={`result ${verdictTone === 'ok' ? '' : verdictTone}`}>
-          <div className="verdict">
-            {verdictTone === 'ok' && '✓ Кампания окупится в горизонте прогноза'}
-            {verdictTone === 'mid' && '⚠ Окупаемость возможна, но за пределами горизонта'}
-            {verdictTone === 'bad' && '✕ По прогнозу кампания не окупится'}
-          </div>
-          <div className="prob-track">
-            <div className="prob-fill" style={{ width: `${Math.round((result.paybackProbability ?? 0) * 100)}%` }} />
-          </div>
-          <div className="nums">
-            <div className="n">
-              <div className="v">{fmtRatio(result.forecastRoi)}</div>
-              <div className="k">коэффициент окупаемости</div>
-            </div>
-            <div className="n">
-              <div className="v">{fmtPercent(result.paybackProbability)}</div>
-              <div className="k">вероятность окупаемости</div>
-            </div>
-            <div className="n">
-              <div className="v">{result.paybackDays === null ? '—' : fmtDays(result.paybackDays)}</div>
-              <div className="k">срок окупаемости</div>
-            </div>
-            {ratio !== null && (
-              <div className="n">
-                <div className="v">{result.paybackWithinHorizon ? 'да' : 'нет'}</div>
-                <div className="k">в горизонте {result.horizonDays} дн.</div>
+      {result && tone && (
+        <div className={`result ${tone}`}>
+          {isWarning ? (
+            <>
+              <div className="verdict">
+                {result.verdict === 'BELOW_MINIMUM' && '⚠ Бюджет ниже минимума площадки'}
+                {result.verdict === 'NO_CHANNEL_DATA' && '⚠ По этому каналу нет данных для прогноза'}
+                {result.verdict === 'OUT_OF_RANGE' && '⚠ По такому бюджету прогноз недостоверен'}
               </div>
-            )}
-          </div>
+              <div className="money-line">{result.basis}</div>
+              {result.dayBudgetMin !== null && result.dayBudgetMax !== null && (
+                <div className="basis">
+                  Модель знает дневные бюджеты от {fmtMoney(result.dayBudgetMin, currency)} до{' '}
+                  {fmtMoney(result.dayBudgetMax, currency)} в день — при таком бюджете оценивать нечего.
+                </div>
+              )}
+              {result.dataNote && <div className="basis">Источник и пояснение: {result.dataNote}</div>}
+              <div className="advice">
+                {result.verdict === 'NO_CHANNEL_DATA'
+                  ? 'Общая модель этот канал не знает. Когда по нему появятся ваши завершённые кампании, модель организации обучится на них — до тех пор прогноз по каналу не выдаётся.'
+                  : 'Проверьте бюджет и длительность — вероятно, в бюджете опечатка. После исправления нажмите «Рассчитать».'}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="verdict">
+                {tone === 'ok' && '✓'}{tone === 'mid' && '⚠'}{tone === 'bad' && '✕'}
+                {' '}{verdictLabel(result.verdict)}
+              </div>
+              <div className="money-line">
+                Вложите {fmtMoney(campaign.budget, currency)} — вернётся ≈ {fmtMoney(expectedReturn, currency)}
+                <span className="range"> (от {fmtMoney(returnFrom)} до {fmtMoney(returnTo)})</span>.
+                {' '}{profit !== null && profit >= 0 ? 'Прибыль ≈ ' : 'Потери ≈ '}
+                <b>{fmtSigned(profit)} {currency}</b>
+              </div>
+              <div className="interval-wrap">
+                <div className="interval-track">
+                  <div className="interval-fill" style={{ left: `${lowerPct}%`, width: `${widthPct}%` }} />
+                  <div className="interval-target" style={{ left: `${breakEvenPct}%` }} />
+                </div>
+                <div className="interval-labels">
+                  <span>интервал 80 %: {fmtCoef(intervalLower)}–{fmtCoef(intervalUpper)}</span>
+                  <span className="target">точка окупаемости ×1,0</span>
+                </div>
+              </div>
+              <div className="nums">
+                <div className="n">
+                  <div className="v">{fmtCoef(ratio)}</div>
+                  <div className="k">вернётся на каждый вложенный {currency}</div>
+                </div>
+                <div className="n">
+                  <div className="v">
+                    {result.agreement === null ? '—' : fmtPercent(result.agreement)}
+                  </div>
+                  <div className="k">
+                    {result.agreement === null ? 'оценка по фактам, ансамбля нет' : 'согласованность моделей'}
+                  </div>
+                </div>
+                <div className="n">
+                  <div className="v">
+                    {result.paybackWithinDuration
+                      ? (result.paybackDays === null ? '—' : fmtDays(result.paybackDays))
+                      : 'вне срока'}
+                  </div>
+                  <div className="k">
+                    {result.paybackWithinDuration
+                      ? 'срок возврата средств'
+                      : result.paybackDays === null
+                        ? 'не окупится за время кампании'
+                        : `возврат после окончания кампании (≈${fmtDays(result.paybackDays)} с хвостом дохода)`}
+                  </div>
+                </div>
+                {(result.historyDays ?? 0) > 0 && (
+                  <div className="n">
+                    <div className="v">{result.historyDays}</div>
+                    <div className="k">дней данных кампании учтено</div>
+                  </div>
+                )}
+              </div>
+              {advice && <div className="advice">{advice}</div>}
+            </>
+          )}
+          {result.dataNote && <div className="data-note">⚠ {result.dataNote}</div>}
+          {result.basis && <div className="basis">Основание: {result.basis}</div>}
           <div className="foot">
             <span className="model">
-              модель {result.modelVersion ?? '—'} · CatBoost ×10 · MAPE {result.mape === null ? '—' : `${fmtDecimal(result.mape)} %`}
+              расчёт на {result.durationDays} {plural(Number(result.durationDays ?? 0), ['день', 'дня', 'дней'])}
+              {' · бюджет '}{fmtMoney(campaign.budget, currency)}
+              {result.durationDays ? ` (${fmtMoney(campaign.budget / result.durationDays, currency)} в день)` : ''}
+              {' · область: '}{scopeLabel(result.modelScope)}
+              {' · своя '}{result.ownModelVersion ?? '—'} · {fmtPercent(result.ownWeight)}
+              {' · общая '}{result.generalModelVersion ?? '—'} · MAPE {result.mape === null ? '—' : `${fmtDecimal(result.mape)} %`}
               {' · рассчитано '}{fmtDateTime(result.startedAt)}
             </span>
             <div className="dl">
@@ -329,6 +488,77 @@ function ForecastCard({ campaign, lastForecast, onCompleted }: {
         </div>
       )}
     </div>
+  )
+}
+
+function FinishCampaignModal({ open, campaign, onClose, onFinished }: {
+  open: boolean
+  campaign: CampaignDetail
+  onClose: () => void
+  onFinished: () => void
+}) {
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      setError('')
+    }
+  }, [open])
+
+  const finish = async () => {
+    if (busy) {
+      return
+    }
+    setError('')
+    setBusy(true)
+    try {
+      await api.updateCampaign(campaign.id, {
+        campaignName: campaign.campaignName,
+        budget: campaign.budget,
+        currency: campaign.currency,
+        status: 'FINISHED',
+      })
+      onFinished()
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : 'не удалось завершить кампанию')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const ratio = campaign.totalCost > 0 ? campaign.totalRevenue / campaign.totalCost : null
+
+  return (
+    <Modal open={open} onClose={onClose} title="Завершить кампанию" subtitle={campaign.campaignName}>
+      {error && <div className="form-error">{error}</div>}
+      <p style={{ marginTop: 0, lineHeight: 1.7 }}>
+        Кампания станет обучающим примером для модели вашей организации — она сама переобучится на новых
+        данных, — и появится в разделе «план против факта».
+      </p>
+      <table style={{ marginBottom: 4 }}>
+        <tbody>
+          <tr><td style={{ color: 'var(--muted)' }}>Израсходовано</td><td><b>{fmtMoney(campaign.totalCost, campaign.currency)}</b></td></tr>
+          <tr><td style={{ color: 'var(--muted)' }}>Получено</td><td><b>{fmtMoney(campaign.totalRevenue, campaign.currency)}</b></td></tr>
+          <tr>
+            <td style={{ color: 'var(--muted)' }}>Фактическая окупаемость</td>
+            <td>
+              <b style={{ color: ratio !== null && ratio >= 1 ? 'var(--ok)' : 'var(--bad)' }}>{fmtCoef(ratio)}</b>
+              {' '}на каждый вложенный {campaign.currency}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div className="csub" style={{ marginBottom: 4 }}>
+        После завершения прогноз по кампании больше не рассчитывается — вместо него показывается факт.
+      </div>
+      <div className="foot">
+        <button type="button" className="ghost-btn" onClick={onClose}>Отмена</button>
+        <button type="button" className="cta" disabled={busy} onClick={finish}>
+          {busy ? 'Завершаем…' : 'Завершить кампанию'}
+        </button>
+      </div>
+    </Modal>
   )
 }
 
@@ -399,9 +629,13 @@ function EditCampaignModal({ open, campaign, onClose, onSaved }: {
             <label>Бюджет</label>
             <input inputMode="decimal" value={budget} onChange={(event) => setBudget(event.target.value)} />
           </div>
-          <div className="field" style={{ flex: '0 0 110px' }}>
+          <div className="field" style={{ flex: '0 0 130px' }}>
             <label>Валюта</label>
-            <input maxLength={10} value={currency} onChange={(event) => setCurrency(event.target.value)} />
+            <Select
+              value={currency}
+              options={['BYN', 'USD', 'EUR', 'RUB'].map((code) => ({ value: code, label: code }))}
+              onChange={setCurrency}
+            />
           </div>
         </div>
         <div className="field">

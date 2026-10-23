@@ -34,9 +34,11 @@ public class AuditLogRepository {
 
     private static final String WHERE = """
             where (:category = 'all'
-                   or (:category = 'users' and a.action in ('регистрация', 'вход в систему', 'выход из системы', 'создание пользователя', 'изменение пользователя'))
-                   or (:category = 'data' and a.action like 'загрузка%')
-                   or (:category = 'models' and a.action in ('запуск обучения', 'обучение завершено', 'активация версии модели', 'изменение флагов обучения'))
+                   or (:category = 'users' and (a.action in ('регистрация', 'вход в систему', 'выход из системы')
+                                                or a.action like '%пользовател%'))
+                   or (:category = 'data' and (a.action like 'загрузка%' or a.action like '%кампани%'
+                                               or a.action like '%прогноз%' or a.action like '%отчёт%'))
+                   or (:category = 'models' and (a.action like '%обучени%' or a.action like '%модел%'))
                    or (:category = 'backups' and a.action like '%копи%'))
               and (lower(coalesce(u.login, '')) like :pattern escape '\\'
                    or lower(coalesce(u.full_name, '')) like :pattern escape '\\'

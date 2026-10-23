@@ -17,8 +17,8 @@ public final class Queries {
                    v.total_impressions as totalImpressions,
                    v.total_clicks as totalClicks,
                    fs.latest_forecast_roi as latestForecastRoi,
-                   fs.latest_payback_months as latestPaybackMonths,
-                   fs.latest_payback_probability as latestPaybackProbability
+                   fs.latest_payback_ratio as latestPaybackRatio,
+                   fs.latest_verdict as latestVerdict
             from v_campaign_summary v
             left join v_forecast_stats fs on fs.campaign_id = v.campaign_id
             """;
@@ -28,8 +28,8 @@ public final class Queries {
                    v.forecast_count as forecastCount,
                    v.last_forecast_at as lastForecastAt,
                    v.latest_forecast_roi as latestForecastRoi,
-                   v.latest_payback_months as latestPaybackMonths,
-                   v.latest_payback_probability as latestPaybackProbability
+                   v.latest_payback_ratio as latestPaybackRatio,
+                   v.latest_verdict as latestVerdict
             from v_forecast_stats v
             """;
 

@@ -5,9 +5,15 @@ import java.util.List;
 
 public record AdminModelResponse(
         long modelId,
+        String modelName,
+        Long organizationId,
+        String organizationName,
+        String scope,
         String version,
         LocalDateTime trainedAt,
         double mape,
+        Double mapeWithHistory,
+        Double mapePlanned,
         boolean isActive,
         boolean available,
         DatasetSnapshotResponse snapshot

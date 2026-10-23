@@ -46,12 +46,13 @@ export function Layout({ children }: { children: ReactNode }) {
           </div>
         </div>
         <div className="nav-right">
-          <div className="user-chip">
+          <div className="user-chip" title={user?.organization ? `Организация: ${user.organization}` : undefined}>
             <div className="avatar">{initials(user?.fullName ?? '')}</div>
             <span>
               {user?.fullName}
               <br />
               {user?.role}
+              {user?.organization ? ` · ${user.organization}` : ''}
             </span>
           </div>
           <button className="ghost-btn" onClick={handleLogout}>Выйти</button>

@@ -88,7 +88,8 @@ public class AuthController {
                 .map(GrantedAuthority::getAuthority)
                 .filter(authority -> !authority.startsWith("ROLE_"))
                 .toList();
-        return CurrentUserResponse.of(user.getLogin(), user.getFullName(), role, permissions);
+        return CurrentUserResponse.of(user.getLogin(), user.getFullName(), role,
+                user.getOrganization().getName(), permissions);
     }
 
     private LoginResponse issueLogin(User user) {
@@ -99,6 +100,7 @@ public class AuthController {
         user.setLastLogin(LocalDateTime.now());
         userRepository.save(user);
         String token = jwtService.issue(user.getId(), user.getLogin(), user.getRole().getRoleName(), permissions);
-        return new LoginResponse(token, user.getLogin(), user.getFullName(), user.getRole().getRoleName());
+        return new LoginResponse(token, user.getLogin(), user.getFullName(), user.getRole().getRoleName(),
+                user.getOrganization().getName());
     }
 }

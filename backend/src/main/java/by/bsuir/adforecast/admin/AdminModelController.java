@@ -11,8 +11,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-
 @RestController
 @RequestMapping("/api/admin/models")
 public class AdminModelController {
@@ -25,7 +23,7 @@ public class AdminModelController {
 
     @GetMapping
     @PreAuthorize("hasAuthority('models.manage')")
-    public List<AdminModelResponse> models() {
+    public AdminModelsResponse models() {
         return adminModelService.models();
     }
 

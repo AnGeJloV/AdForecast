@@ -1,30 +1,26 @@
 package by.bsuir.adforecast.forecast;
 
-import jakarta.validation.constraints.DecimalMax;
-import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotNull;
-
-import java.math.BigDecimal;
+import jakarta.validation.constraints.Pattern;
 
 public record ForecastRequest(
 
-        @NotNull
         @Min(1)
-        @Max(730)
-        Integer horizonDays,
-
-        @NotNull
-        @DecimalMin("0.0")
-        @DecimalMax("1.0")
-        BigDecimal confidenceLevel,
-
-        @NotNull
-        Boolean useSeasonality,
+        @Max(365)
+        Integer durationDays,
 
         @Min(1)
         @Max(12)
-        Integer startMonth
+        Integer startMonth,
+
+        /** BLEND — своя модель вместе с общей (по умолчанию), OWN — только свои данные,
+         *  GENERAL — только общая модель системы. */
+        @Pattern(regexp = "BLEND|OWN|GENERAL")
+        String modelScope
 ) {
+
+    public String scopeOrDefault() {
+        return modelScope == null ? "BLEND" : modelScope;
+    }
 }

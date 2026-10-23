@@ -3,12 +3,14 @@ export interface LoginResponse {
   login: string
   fullName: string
   role: string
+  organization: string
 }
 
 export interface CurrentUser {
   login: string
   fullName: string
   role: string
+  organization: string
   permissions: string[]
 }
 
@@ -20,6 +22,16 @@ export interface RegisterRequest {
 }
 
 export type CampaignStatus = 'PLANNED' | 'ACTIVE' | 'FINISHED'
+
+export type ForecastVerdict =
+  | 'PROFITABLE'
+  | 'BORDERLINE'
+  | 'UNPROFITABLE'
+  | 'OUT_OF_RANGE'
+  | 'BELOW_MINIMUM'
+  | 'NO_CHANNEL_DATA'
+
+export type ModelScope = 'BLEND' | 'OWN' | 'GENERAL'
 
 export interface CampaignSummary {
   id: number
@@ -36,8 +48,8 @@ export interface CampaignSummary {
   totalImpressions: number
   totalClicks: number
   latestForecastRoi: number | null
-  latestPaybackMonths: number | null
-  latestPaybackProbability: number | null
+  latestPaybackRatio: number | null
+  latestVerdict: ForecastVerdict | null
 }
 
 export interface CampaignDetail extends CampaignSummary {
@@ -67,6 +79,13 @@ export interface AdAccount {
   platform: string
 }
 
+export interface PlatformInfo {
+  name: string
+  cpc: number
+  minDayBudget: number
+  note: string
+}
+
 export interface AdminCampaignInsight {
   campaign: CampaignDetail
   metrics: DailyMetricPoint[]
@@ -77,15 +96,33 @@ export interface ForecastHistoryItem {
   id: number
   status: string
   startedAt: string
-  modelVersion: string
-  horizonDays: number | null
-  confidenceLevel: number | null
-  useSeasonality: boolean | null
+  verdict: ForecastVerdict | null
+  paybackRatio: number | null
   forecastRoi: number | null
-  paybackMonths: number | null
+  intervalLower: number | null
+  intervalUpper: number | null
+  agreement: number | null
   paybackDays: number | null
-  paybackWithinHorizon: boolean | null
-  paybackProbability: number | null
+  paybackMonths: number | null
+  paybackWithinDuration: boolean | null
+  expectedProfit: number | null
+  budgetMin: number | null
+  budgetMax: number | null
+  budgetAny: boolean
+  modelScope: ModelScope | null
+  dayBudgetMin: number | null
+  dayBudgetMax: number | null
+  dataNote: string | null
+  durationDays: number | null
+  startMonth: number | null
+  historyDays: number | null
+  historyCost: number | null
+  historyRevenue: number | null
+  ownModelVersion: string | null
+  generalModelVersion: string | null
+  ownWeight: number | null
+  ownCampaigns: number | null
+  basis: string | null
   mape: number | null
 }
 
@@ -103,6 +140,16 @@ export interface CashflowPoint {
   revenue: number
 }
 
+export interface DashboardChannel {
+  platform: string
+  finishedCampaigns: number
+  totalCost: number
+  totalRevenue: number
+  avgRoi: number
+  profitable: number
+  unprofitable: number
+}
+
 export interface PlanFactRow {
   campaignId: number
   campaignName: string
@@ -112,7 +159,7 @@ export interface PlanFactRow {
   forecastRoi: number
   deviation: number | null
   days: number
-  horizon: number
+  durationDays: number
   comparable: boolean
 }
 
@@ -129,6 +176,7 @@ export interface DashboardData {
   unprofitableCampaigns: number
   forecastsTotal: number
   forecastsCompleted: number
+  channels: DashboardChannel[]
   planVsFact: PlanFactRow[]
   planVsFactAvgDeviation: number | null
 }
@@ -172,27 +220,12 @@ export interface AnalyzeResponse {
 export type UploadField = 'date' | 'impressions' | 'clicks' | 'cost' | 'revenue'
 
 export interface ForecastRequest {
-  horizonDays: number
-  confidenceLevel: number
-  useSeasonality: boolean
+  durationDays: number | null
   startMonth: number | null
+  modelScope?: ModelScope
 }
 
-export interface ForecastResult {
-  id: number
-  status: string
-  startedAt: string
-  modelVersion: string | null
-  horizonDays: number | null
-  confidenceLevel: number | null
-  useSeasonality: boolean | null
-  forecastRoi: number | null
-  paybackMonths: number | null
-  paybackDays: number | null
-  paybackWithinHorizon: boolean | null
-  paybackProbability: number | null
-  mape: number | null
-}
+export interface ForecastResult extends ForecastHistoryItem {}
 
 export interface ForecastListItem {
   id: number
@@ -200,11 +233,13 @@ export interface ForecastListItem {
   campaignName: string
   startedAt: string
   status: string
-  modelVersion: string
-  horizonDays: number | null
+  verdict: ForecastVerdict | null
+  paybackRatio: number | null
   forecastRoi: number | null
+  intervalLower: number | null
+  intervalUpper: number | null
+  durationDays: number | null
   paybackMonths: number | null
-  paybackProbability: number | null
   mape: number | null
 }
 
@@ -216,10 +251,17 @@ export interface CompareVariant {
 }
 
 export interface CompareResult extends CompareVariant {
+  verdict: ForecastVerdict
+  paybackRatio: number
   forecastRoi: number
+  intervalLower: number
+  intervalUpper: number
   paybackMonths: number | null
-  paybackProbability: number
-  paybackWithinHorizon: boolean
+  paybackWithinDuration: boolean
+  profitableBudgetMin: number | null
+  profitableBudgetMax: number | null
+  profitableAtAnyBudget: boolean
+  basis: string
 }
 
 export interface UserItem {
@@ -261,7 +303,7 @@ export interface AuditEntry {
   fullName: string | null
   action: string
   objectType: string | null
-  objectId: number | null
+  objectId: number
   details: string | null
   actionTime: string
   ip: string | null
@@ -283,9 +325,15 @@ export interface ModelSnapshot {
 
 export interface AdminModel {
   modelId: number
+  modelName: string
+  organizationId: number | null
+  organizationName: string | null
+  scope: string
   version: string
   trainedAt: string
   mape: number
+  mapeWithHistory: number | null
+  mapePlanned: number | null
   isActive: boolean
   available: boolean
   snapshot: ModelSnapshot | null
@@ -322,6 +370,10 @@ export interface TrainingTaskModel {
   mape: number
   r2: number
   mae: number
+  mapeWithHistory: number | null
+  r2WithHistory: number | null
+  mapePlanned: number | null
+  r2Planned: number | null
   holdoutSize: number
   ensembleSize: number
   campaignCount: number
@@ -334,4 +386,10 @@ export interface TrainingTask {
   status: string
   model: TrainingTaskModel | null
   error: string | null
+}
+
+export interface AdminModelsResponse {
+  models: AdminModel[]
+  organizationsTotal: number
+  organizationsWithOwnModel: number
 }

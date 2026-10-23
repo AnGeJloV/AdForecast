@@ -144,3 +144,70 @@ export const MONTHS = [
 export function monthName(month: number): string {
   return MONTHS[month - 1] ?? String(month)
 }
+
+export type Verdict = 'PROFITABLE' | 'BORDERLINE' | 'UNPROFITABLE'
+
+export function verdictLabel(verdict: string | null | undefined): string {
+  switch (verdict) {
+    case 'PROFITABLE':
+      return 'Вкладываться'
+    case 'BORDERLINE':
+      return 'На грани'
+    case 'UNPROFITABLE':
+      return 'Убыточно'
+    case 'OUT_OF_RANGE':
+      return 'Вне данных'
+    case 'BELOW_MINIMUM':
+      return 'Ниже минимума площадки'
+    case 'NO_CHANNEL_DATA':
+      return 'Нет данных по каналу'
+    default:
+      return '—'
+  }
+}
+
+export function verdictTone(verdict: string | null | undefined): PaybackTone | null {
+  switch (verdict) {
+    case 'PROFITABLE':
+      return 'ok'
+    case 'BORDERLINE':
+      return 'mid'
+    case 'UNPROFITABLE':
+    case 'OUT_OF_RANGE':
+    case 'BELOW_MINIMUM':
+      return 'bad'
+    case 'NO_CHANNEL_DATA':
+      return 'mid'
+    default:
+      return null
+  }
+}
+
+export function scopeLabel(scope: string | null | undefined): string {
+  switch (scope) {
+    case 'OWN':
+      return 'только свои данные'
+    case 'GENERAL':
+      return 'только общая модель'
+    case 'BLEND':
+      return 'своя и общая модели'
+    default:
+      return '—'
+  }
+}
+
+/** Коэффициент окупаемости из API (1,43) → «1,43» */
+export function fmtCoef(ratio: number | null | undefined): string {
+  if (ratio === null || ratio === undefined || Number.isNaN(ratio)) {
+    return '—'
+  }
+  return ratio.toFixed(2).replace('.', ',')
+}
+
+/** Сумма со знаком: +12 300 / −12 300 */
+export function fmtSigned(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return '—'
+  }
+  return `${value > 0 ? '+' : value < 0 ? '−' : ''}${fmtNum(Math.abs(value))}`
+}

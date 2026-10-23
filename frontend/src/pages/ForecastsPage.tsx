@@ -9,17 +9,18 @@ import type { SortColumn } from '../components/SortableTable'
 import { Select } from '../components/Select'
 import { EmptyState, ErrorBox, PageLoader, Pager, StatusPill } from '../components/Ui'
 import {
+  fmtCoef,
   fmtDateTime,
   fmtDays,
   fmtDecimal,
   fmtMoney,
-  fmtPercent,
-  fmtRatio,
   MONTHS,
   paybackLabel,
   paybackTone,
   rangeLabel,
   ratioValue,
+  verdictLabel,
+  verdictTone,
 } from '../utils/format'
 
 interface VariantDraft {
@@ -43,8 +44,8 @@ const FORECAST_PAGE_SIZE = 10
 const FORECAST_COLUMNS: SortColumn<ForecastListItem>[] = [
   { id: 'started', title: 'Дата', value: (row) => row.startedAt },
   { id: 'campaign', title: 'Кампания', value: (row) => row.campaignName },
-  { id: 'roi', title: 'ROI', value: (row) => row.forecastRoi },
-  { id: 'probability', title: 'Вероятность', value: (row) => (row.paybackProbability === null ? null : row.paybackProbability * 100) },
+  { id: 'verdict', title: 'Вердикт', value: (row) => (row.verdict === null ? null : verdictLabel(row.verdict)) },
+  { id: 'ratio', title: 'Коэффициент', value: (row) => row.paybackRatio },
   { id: 'payback', title: 'Срок', value: (row) => (row.paybackMonths === null ? null : row.paybackMonths * 30.44) },
   { id: 'status', title: 'Статус', value: (row) => statusLabel(row.status) },
 ]
@@ -143,7 +144,7 @@ export function ForecastsPage() {
     if (!results || results.length < 2) {
       return -1
     }
-    return results[0].forecastRoi >= results[1].forecastRoi ? 0 : 1
+    return results[0].paybackRatio >= results[1].paybackRatio ? 0 : 1
   }, [results])
 
   if (!campaigns) {
@@ -228,22 +229,48 @@ export function ForecastsPage() {
         {results && (
           <>
             <div className="compare-result">
-              {results.map((result, index) => (
-                <div className={`variant${winner === index ? ' winner' : ''}`} key={index}>
-                  <div className="name">
-                    {index === 0 ? 'А' : 'Б'} · {fmtMoney(result.budget)} / {fmtDays(result.durationDays)}
-                    {winner === index && <span className="crown">✓ выгоднее</span>}
+              {results.map((result, index) => {
+                const tone = verdictTone(result.verdict)
+                const width = Math.min(100, (result.paybackRatio / 2) * 100)
+                const min = result.profitableBudgetMin
+                const max = result.profitableBudgetMax
+                const budgetHint = min !== null && max !== null
+                  ? `окупается при бюджете ${fmtMoney(min)}–${fmtMoney(max)}`
+                  : min !== null
+                    ? `окупается при бюджете от ${fmtMoney(min)}`
+                    : max !== null
+                      ? `окупается при бюджете до ${fmtMoney(max)}`
+                      : result.profitableAtAnyBudget
+                        ? 'окупается при любом разумном бюджете'
+                        : 'окна окупаемости по бюджету нет'
+                return (
+                  <div className={`variant${winner === index ? ' winner' : ''}`} key={index}>
+                    <div className="name">
+                      {index === 0 ? 'А' : 'Б'} · {fmtMoney(result.budget)} / {fmtDays(result.durationDays)}
+                      {winner === index && <span className="crown">✓ выгоднее</span>}
+                    </div>
+                    <div className="roi">{fmtCoef(result.paybackRatio)}</div>
+                    <div className="meta">
+                      {result.platform} · {verdictLabel(result.verdict).toLowerCase()}
+                      {' · интервал '}{fmtCoef(result.intervalLower)}–{fmtCoef(result.intervalUpper)}
+                      {result.paybackMonths === null
+                        ? ' · не окупится за кампанию'
+                        : ` · возврат средств ${fmtDays(result.paybackMonths * 30.44)}`}
+                    </div>
+                    <div className="track">
+                      <div
+                        className="fill"
+                        style={{
+                          width: `${width}%`,
+                          background: tone === 'ok' ? 'var(--ok)' : tone === 'mid' ? 'var(--warn)' : 'var(--bad)',
+                        }}
+                      />
+                    </div>
+                    {budgetHint && <div className="v-hint">{budgetHint}</div>}
+                    {result.basis && <div className="v-basis">основано {result.basis}</div>}
                   </div>
-                  <div className="roi">{fmtRatio(result.forecastRoi)}</div>
-                  <div className="meta">
-                    {result.platform} · вероятность {fmtPercent(result.paybackProbability)}
-                    {' · срок '}{result.paybackMonths === null ? 'не окупается' : fmtDays(result.paybackMonths * 30.44)}
-                  </div>
-                  <div className="track">
-                    <div className="fill" style={{ width: `${Math.round(result.paybackProbability * 100)}%` }} />
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
             {results.length >= 2 && (
               <div className="verdict">
@@ -275,7 +302,7 @@ export function ForecastsPage() {
               </thead>
               <tbody>
                 {pageRows.map((forecast) => {
-                  const tone = forecast.status === 'COMPLETED' ? paybackTone(ratioValue(forecast.forecastRoi)) : null
+                  const tone = forecast.status === 'COMPLETED' ? verdictTone(forecast.verdict) : null
                   return (
                     <tr key={forecast.id}>
                       <td className="mono">{fmtDateTime(forecast.startedAt)}</td>
@@ -289,11 +316,18 @@ export function ForecastsPage() {
                       {forecast.status === 'COMPLETED'
                         ? (
                           <>
-                            <td className="mono" style={{ fontWeight: 700, color: tone ? `var(--${tone === 'ok' ? 'ok' : tone === 'mid' ? 'warn' : 'bad'})` : undefined }}>
-                              {fmtRatio(forecast.forecastRoi)}
+                            <td>
+                              {forecast.verdict
+                                ? <StatusPill tone={tone} label={verdictLabel(forecast.verdict).toLowerCase()} />
+                                : '—'}
                             </td>
-                            <td className="mono">{fmtPercent(forecast.paybackProbability)}</td>
-                            <td>{forecast.paybackMonths === null ? '—' : fmtDays(forecast.paybackMonths * 30.44)}</td>
+                            <td className="mono" style={{ fontWeight: 700, color: tone ? `var(--${tone === 'ok' ? 'ok' : tone === 'mid' ? 'warn' : 'bad'})` : undefined }}>
+                              {fmtCoef(forecast.paybackRatio)}
+                              <span style={{ fontWeight: 400, color: 'var(--muted)', fontSize: 11 }}>
+                                {' '}({fmtCoef(forecast.intervalLower)}–{fmtCoef(forecast.intervalUpper)})
+                              </span>
+                            </td>
+                            <td>{forecast.paybackMonths === null ? 'не окупается' : fmtDays(forecast.paybackMonths * 30.44)}</td>
                           </>
                           )
                         : <td colSpan={3} style={{ color: 'var(--muted)' }}>{forecast.status === 'FAILED' ? 'расчёт завершился с ошибкой' : 'расчёт выполняется…'}</td>}
@@ -331,19 +365,20 @@ export function ForecastsPage() {
 function CompareVerdict({ results, winner }: { results: CompareResult[]; winner: number }) {
   const best = results[winner]
   const other = results[winner === 0 ? 1 : 0]
-  const gain = (best.forecastRoi - other.forecastRoi) / 100
+  const gain = best.paybackRatio - other.paybackRatio
   const bestMonths = best.paybackMonths
   const otherMonths = other.paybackMonths
   return (
     <span>
-      При бюджете <b>{fmtMoney(best.budget)}</b> ({best.platform}) отдача выше на <b>{fmtDecimal(gain)}</b> коэффициента.
+      Вариант <b>{winner === 0 ? 'А' : 'Б'}</b> выгоднее: на каждый вложенный рубль вернётся
+      {' '}на <b>{fmtDecimal(gain)}</b> больше ({fmtCoef(best.paybackRatio)} против {fmtCoef(other.paybackRatio)}).
       {bestMonths !== null && otherMonths !== null && bestMonths !== otherMonths && (
         <>
-          {' '}Вариант {winner === 0 ? 'Б' : 'А'} окупится{' '}
+          {' '}Вариант {winner === 0 ? 'Б' : 'А'} вернёт вложения{' '}
           {bestMonths < otherMonths ? 'позже' : 'раньше'} на <b>{fmtDays(Math.abs(otherMonths - bestMonths) * 30.44)}</b>.
         </>
       )}
-      {(bestMonths === null || otherMonths === null) && bestMonths === null && (
+      {bestMonths === null && otherMonths !== null && (
         <> При этом вариант {winner === 0 ? 'А' : 'Б'} по прогнозу не окупается вовсе.</>
       )}
     </span>
@@ -379,20 +414,28 @@ function PickCampaignModal({ open, campaigns, onClose }: {
     <div key={title}>
       <div className="pick-group">{title}</div>
       {items.map((campaign) => {
-        const roi = campaign.latestForecastRoi ?? campaign.actualRoi
-        const tone = campaign.status === 'PLANNED' ? null : paybackTone(ratioValue(roi))
+        const tone = campaign.latestVerdict
+          ? verdictTone(campaign.latestVerdict)
+          : campaign.status === 'PLANNED'
+            ? null
+            : paybackTone(ratioValue(campaign.actualRoi))
+        const pillLabel = campaign.latestVerdict
+          ? verdictLabel(campaign.latestVerdict).toLowerCase()
+          : campaign.status === 'PLANNED'
+            ? 'планируется'
+            : paybackLabel(tone)
         return (
           <div className="pick" key={campaign.id} onClick={() => pick(campaign.id)}>
             <div className="main">
               <div className="t">{campaign.campaignName}</div>
               <div className="s">
                 {campaign.platform} · {fmtMoney(campaign.budget, campaign.currency)}
-                {roi !== null ? ` · прогноз ${fmtRatio(roi)}` : ''}
+                {campaign.latestPaybackRatio !== null ? ` · прогноз ${fmtCoef(campaign.latestPaybackRatio)}` : ''}
               </div>
             </div>
-            {campaign.status === 'PLANNED'
-              ? <StatusPill tone="plan" label="планируется" />
-              : <StatusPill tone={tone} label={paybackLabel(tone)} />}
+            {campaign.status === 'FINISHED'
+              ? <StatusPill tone={paybackTone(ratioValue(campaign.actualRoi))} label={paybackLabel(paybackTone(ratioValue(campaign.actualRoi)))} />
+              : <StatusPill tone={tone} label={pillLabel} />}
             <span className="arrow">→</span>
           </div>
         )
@@ -418,8 +461,8 @@ function PickCampaignModal({ open, campaigns, onClose }: {
       {group('Активные — пересчитать по текущим данным', active)}
       {group('Завершённые', finished)}
       <div className="pick-foot">
-        Откроется карточка кампании с формой прогноза: горизонт, месяц старта и доверительный уровень
-        можно изменить перед расчётом.
+        Откроется карточка кампании с формой прогноза: длительность и месяц старта можно изменить
+        перед расчётом. Для завершённых кампаний прогноз не нужен — фактическая окупаемость уже известна.
       </div>
     </Modal>
   )

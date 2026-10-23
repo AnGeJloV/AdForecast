@@ -1,5 +1,6 @@
 package by.bsuir.adforecast.export;
 
+import by.bsuir.adforecast.audit.AuditService;
 import by.bsuir.adforecast.campaign.CampaignService;
 import by.bsuir.adforecast.domain.Campaign;
 import by.bsuir.adforecast.domain.ExportFormat;
@@ -30,6 +31,7 @@ import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -47,32 +49,41 @@ public class ExportService {
     private final CampaignRepository campaignRepository;
     private final CampaignService campaignService;
     private final ExportHistoryRepository exportHistoryRepository;
+    private final AuditService auditService;
 
     public ExportService(ForecastRepository forecastRepository,
                          ForecastParamRepository forecastParamRepository,
                          ForecastResultRepository forecastResultRepository,
                          CampaignRepository campaignRepository,
                          CampaignService campaignService,
-                         ExportHistoryRepository exportHistoryRepository) {
+                         ExportHistoryRepository exportHistoryRepository,
+                         AuditService auditService) {
         this.forecastRepository = forecastRepository;
         this.forecastParamRepository = forecastParamRepository;
         this.forecastResultRepository = forecastResultRepository;
         this.campaignRepository = campaignRepository;
         this.campaignService = campaignService;
         this.exportHistoryRepository = exportHistoryRepository;
+        this.auditService = auditService;
     }
 
+    @Transactional
     public byte[] exportXlsx(long forecastId, long userId) {
         ForecastReport report = prepareReport(forecastId, userId);
         byte[] content = buildXlsx(report);
         saveHistory(forecastId, ExportFormat.XLSX);
+        auditService.record(userId, "выгрузка отчёта", "прогноз", forecastId,
+                "формат XLSX, кампания «" + report.campaignName() + "»");
         return content;
     }
 
+    @Transactional
     public byte[] exportPdf(long forecastId, long userId) {
         ForecastReport report = prepareReport(forecastId, userId);
         byte[] content = buildPdf(report);
         saveHistory(forecastId, ExportFormat.PDF);
+        auditService.record(userId, "выгрузка отчёта", "прогноз", forecastId,
+                "формат PDF, кампания «" + report.campaignName() + "»");
         return content;
     }
 
@@ -91,8 +102,31 @@ public class ExportService {
                 .orElseThrow(() -> new EntityNotFoundException("результат прогноза не найден"));
 
         String paybackMonths = result.getPaybackMonths() == null
-                ? "не окупается в горизонте планирования"
+                ? "не окупается в течение кампании"
                 : result.getPaybackMonths().toPlainString();
+        String verdict = switch (result.getVerdict() == null ? "" : result.getVerdict()) {
+            case "PROFITABLE" -> "вкладываться";
+            case "BORDERLINE" -> "на грани окупаемости";
+            case "UNPROFITABLE" -> "убыточно";
+            default -> "—";
+        };
+        String budgetRange;
+        if (result.getBudgetMin() == null && result.getBudgetMax() == null) {
+            budgetRange = "не рассчитан";
+        } else {
+            budgetRange = (result.getBudgetMin() == null ? "от минимального" : result.getBudgetMin().toPlainString())
+                    + " — "
+                    + (result.getBudgetMax() == null ? "без ограничения" : result.getBudgetMax().toPlainString());
+        }
+        String history = param.getHistDays() == 0
+                ? "нет (кампания планируемая)"
+                : param.getHistDays() + " дней, расход " + param.getHistCost().toPlainString()
+                        + ", доход " + param.getHistRevenue().toPlainString();
+        String modelInfo = "основная: " + forecast.getModel().getModelName() + " " + forecast.getModel().getModelVersion();
+        if (result.getOwnModel() != null) {
+            modelInfo += ", своя: " + result.getOwnModel().getModelVersion()
+                    + " (вес " + result.getOwnWeight().toPlainString() + ")";
+        }
         return new ForecastReport(
                 forecast.getId(),
                 forecast.getStartedAt(),
@@ -102,22 +136,22 @@ public class ExportService {
                 campaign.getAccount().getPlatform(),
                 campaign.getBudget().toPlainString() + " " + campaign.getCurrency(),
                 campaign.getStatus().name(),
-                param.getHorizonDays(),
-                param.getConfidenceLevel().toPlainString(),
-                param.getUseSeasonality() ? "да" : "нет",
+                verdict,
+                result.getPaybackRatio() == null ? "" : result.getPaybackRatio().toPlainString(),
                 result.getForecastRoi() == null ? "" : result.getForecastRoi().toPlainString(),
+                result.getIntervalLower() == null ? "" : result.getIntervalLower().toPlainString(),
+                result.getIntervalUpper() == null ? "" : result.getIntervalUpper().toPlainString(),
+                result.getAgreement() == null
+                        ? ""
+                        : String.format(Locale.US, "%.0f", result.getAgreement().doubleValue() * 100),
                 paybackMonths,
-                formatProbability(result.getPaybackProbability()),
-                forecast.getModel().getModelVersion(),
+                result.getExpectedProfit() == null ? "" : result.getExpectedProfit().toPlainString(),
+                budgetRange,
+                String.valueOf(param.getDurationDays()),
+                history,
+                modelInfo,
                 result.getMape() == null ? "" : result.getMape().toPlainString()
         );
-    }
-
-    private String formatProbability(BigDecimal probability) {
-        if (probability == null) {
-            return "";
-        }
-        return String.format(Locale.US, "%.2f", probability.doubleValue());
     }
 
     private byte[] buildXlsx(ForecastReport report) {

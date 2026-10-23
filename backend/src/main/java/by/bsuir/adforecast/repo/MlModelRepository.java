@@ -12,6 +12,16 @@ public interface MlModelRepository extends JpaRepository<MlModel, Long> {
 
     Optional<MlModel> findByIsActiveTrue();
 
+    Optional<MlModel> findByOrganizationIdIsNullAndIsActiveTrue();
+
+    Optional<MlModel> findByOrganizationIdAndIsActiveTrue(Long organizationId);
+
+    List<MlModel> findByOrganizationIdIsNull();
+
+    List<MlModel> findByOrganizationId(Long organizationId);
+
+    List<MlModel> findByOrganizationIdIsNotNull();
+
     List<MlModel> findAllByOrderByTrainedAtDesc();
 
     List<MlModel> findByIsActiveFalse();

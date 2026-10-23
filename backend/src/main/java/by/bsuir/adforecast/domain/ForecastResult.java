@@ -29,14 +29,60 @@ public class ForecastResult {
     @JoinColumn(name = "forecast_id", unique = true)
     private Forecast forecast;
 
-    @Column(name = "payback_months")
-    private BigDecimal paybackMonths;
+    @Column(name = "verdict")
+    private String verdict;
+
+    @Column(name = "payback_ratio")
+    private BigDecimal paybackRatio;
 
     @Column(name = "forecast_roi")
     private BigDecimal forecastRoi;
 
-    @Column(name = "payback_probability")
-    private BigDecimal paybackProbability;
+    @Column(name = "interval_lower")
+    private BigDecimal intervalLower;
+
+    @Column(name = "interval_upper")
+    private BigDecimal intervalUpper;
+
+    @Column(name = "agreement")
+    private BigDecimal agreement;
+
+    @Column(name = "payback_months")
+    private BigDecimal paybackMonths;
+
+    @Column(name = "payback_days")
+    private BigDecimal paybackDays;
+
+    @Column(name = "expected_profit")
+    private BigDecimal expectedProfit;
+
+    @Column(name = "budget_min")
+    private BigDecimal budgetMin;
+
+    @Column(name = "budget_max")
+    private BigDecimal budgetMax;
+
+    @Column(name = "budget_any", nullable = false)
+    private Boolean budgetAny;
+
+    @Column(name = "model_scope", nullable = false)
+    private String modelScope;
+
+    @Column(name = "day_budget_min")
+    private BigDecimal dayBudgetMin;
+
+    @Column(name = "day_budget_max")
+    private BigDecimal dayBudgetMax;
+
+    @Column(name = "data_note")
+    private String dataNote;
+
+    @Column(name = "own_weight")
+    private BigDecimal ownWeight;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "own_model_id")
+    private MlModel ownModel;
 
     @Column(nullable = false)
     private BigDecimal mape;

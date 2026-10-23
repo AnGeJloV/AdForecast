@@ -7,9 +7,16 @@ public record CompareResponse(
         BigDecimal budget,
         Integer durationDays,
         Integer startMonth,
+        String verdict,
+        BigDecimal paybackRatio,
         BigDecimal forecastRoi,
+        BigDecimal intervalLower,
+        BigDecimal intervalUpper,
         BigDecimal paybackMonths,
-        BigDecimal paybackProbability,
-        Boolean paybackWithinHorizon
+        Boolean paybackWithinDuration,
+        BigDecimal profitableBudgetMin,
+        BigDecimal profitableBudgetMax,
+        boolean profitableAtAnyBudget,
+        String basis
 ) {
 }

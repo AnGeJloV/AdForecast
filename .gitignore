@@ -14,5 +14,6 @@ __pycache__/
 Thumbs.db
 db/generator/seed_data.sql
 db/generator/dataset.csv
+db/generator/cutoff_records.csv
 db/backup/adforecast_*.sql
 *.log

@@ -13,5 +13,7 @@ public interface ForecastStatsProjection {
 
     BigDecimal getLatestPaybackMonths();
 
-    BigDecimal getLatestPaybackProbability();
+    BigDecimal getLatestPaybackRatio();
+
+    String getLatestVerdict();
 }

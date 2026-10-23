@@ -44,11 +44,12 @@ public class MlServiceClient {
     }
 
     public TrainAcceptedResponse train(List<Map<String, Object>> records, Integer ensembleSize, Double holdoutFraction,
-                                       Map<String, Object> datasetSnapshot) {
+                                       String modelName, Map<String, Object> datasetSnapshot) {
         Map<String, Object> body = new HashMap<>();
         body.put("records", records);
         body.put("ensemble_size", ensembleSize);
         body.put("holdout_fraction", holdoutFraction);
+        body.put("model_name", modelName);
         body.put("dataset_snapshot", datasetSnapshot);
         try {
             TrainAcceptedResponse response = client.post()
@@ -88,14 +89,22 @@ public class MlServiceClient {
     }
 
     public MlPredictResponse predict(MlPredictCommand command) {
-        Map<String, Object> body = Map.of(
-                "platform", command.platform(),
-                "budget", command.budget(),
-                "duration_days", command.durationDays(),
-                "start_month", command.startMonth(),
-                "horizon_days", command.horizonDays(),
-                "model_version", command.modelVersion()
-        );
+        Map<String, Object> body = new HashMap<>();
+        body.put("platform", command.platform());
+        body.put("budget", command.budget());
+        body.put("duration_days", command.durationDays());
+        body.put("start_month", command.startMonth());
+        if (command.observed() != null) {
+            Map<String, Object> observed = new HashMap<>();
+            observed.put("days", command.observed().days());
+            observed.put("cost_to_date", command.observed().costToDate());
+            observed.put("revenue_to_date", command.observed().revenueToDate());
+            observed.put("cost_last7", command.observed().costLast7());
+            observed.put("revenue_last7", command.observed().revenueLast7());
+            body.put("observed", observed);
+        }
+        body.put("model_name", command.modelName());
+        body.put("model_version", command.modelVersion());
         try {
             MlPredictResponse response = client.post()
                     .uri("/predict")
