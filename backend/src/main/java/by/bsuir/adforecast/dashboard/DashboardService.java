@@ -30,9 +30,15 @@ public class DashboardService {
             limit ?
             """;
 
+    /**
+     * «План против факта»: факт завершённой кампании против последнего прогноза по ней.
+     * Прогнозы-предупреждения (бюджет вне данных модели или ниже минимума площадки,
+     * незнакомый канал) числовой оценки не содержат — сравнивать с фактом нечего,
+     * поэтому кампания в отчёт не попадает.
+     */
     private static final String PLAN_FACT_SQL = """
             with latest as (
-                select distinct on (f.campaign_id) f.campaign_id, r.forecast_roi, p.duration_days
+                select distinct on (f.campaign_id) f.campaign_id, r.forecast_roi, r.verdict, p.duration_days
                 from forecasts f
                 join forecast_results r on r.forecast_id = f.forecast_id
                 join forecast_params p on p.forecast_id = f.forecast_id
@@ -50,6 +56,7 @@ public class DashboardService {
             from v_campaign_summary v
             join latest l on l.campaign_id = v.campaign_id
             where v.status = 'FINISHED'
+              and l.verdict in ('PROFITABLE', 'BORDERLINE', 'UNPROFITABLE')
               and v.campaign_id in (select campaign_id from campaign_access where user_id = ?)
             order by v.campaign_id
             """;

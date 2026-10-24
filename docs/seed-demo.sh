@@ -143,24 +143,38 @@ echo "   кампаний у angejlov: $($DB -t -A -c "SELECT count(*) FROM camp
 TOKEN=$(login_token angejlov)
 [ -n "$TOKEN" ] || fail "не удалось войти как angejlov — проверьте, что backend поднят"
 
-FORECASTS=$($DB -t -A -c "SELECT count(*) FROM forecasts")
+ANGEJLOV_ID=$($DB -t -A -c "SELECT user_id FROM users WHERE login = 'angejlov'")
+# Считаем прогнозы демо-маркетолога, а не по всей базе: иначе чужие прогоны
+# в других организациях «выключают» наполнение демо-данных.
+FORECASTS=$($DB -t -A -c "
+    SELECT count(*) FROM forecasts
+    WHERE campaign_id IN (SELECT campaign_id FROM campaign_access WHERE user_id = $ANGEJLOV_ID)")
 if [ "$FORECASTS" -ge 10 ]; then
-    echo "── Прогнозы уже есть ($FORECASTS) — пропускаю создание"
+    echo "── Прогнозы демо-маркетолога уже есть ($FORECASTS) — пропускаю создание"
 else
     say "Создание прогнозов через API (маркетолог)"
-    ANGEJLOV_ID=$($DB -t -A -c "SELECT user_id FROM users WHERE login = 'angejlov'")
-    run_forecast() { # campaign_id duration_days start_month -> 0 при успехе
+    run_forecast() { # campaign_id duration_days start_month -> 0 при успехе; вердикт в FORECAST_VERDICT
         local result
         result=$(curl -s -X POST "$API/campaigns/$1/forecasts" \
             -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
             -d "{\"durationDays\":$2,\"startMonth\":$3}")
         sleep 0.3
+        FORECAST_VERDICT=$(echo "$result" | sed -n 's/.*"verdict":"\([^"]*\)".*/\1/p')
         if echo "$result" | grep -q '"status":"COMPLETED"'; then
-            echo "   ✓ кампания $1: длительность $2 дн. — готов"
+            echo "   ✓ кампания $1: длительность $2 дн. — готов ($FORECAST_VERDICT)"
             return 0
         fi
         echo "   ✕ кампания $1: $(echo "$result" | head -c 120)"
         return 1
+    }
+
+    # Прогноз-предупреждение (вне данных, ниже минимума площадки, незнакомый канал)
+    # числовой оценки не содержит — сравнивать его с фактом нельзя.
+    numeric_verdict() {
+        case "$1" in
+            PROFITABLE|BORDERLINE|UNPROFITABLE) return 0 ;;
+            *) return 1 ;;
+        esac
     }
 
     # Активные, которые затем «завершаем»: их прогнозы (сделанные по ходу кампании)
@@ -176,10 +190,13 @@ else
         ORDER BY v.days_count DESC
         LIMIT 6" | while IFS='|' read -r cid days; do
         INDEX=$((INDEX + 1))
-        if [ "$INDEX" -le 4 ]; then
-            run_forecast "$cid" "$((days + 30))" 10 && echo "$cid" >> /tmp/adforecast_flip_ids
-        else
-            run_forecast "$cid" "$((days + 90))" 10 && echo "$cid" >> /tmp/adforecast_flip_ids
+        if [ "$INDEX" -le 4 ]; then dur=$((days + 30)); else dur=$((days + 90)); fi
+        if run_forecast "$cid" "$dur" 10; then
+            if numeric_verdict "$FORECAST_VERDICT"; then
+                echo "$cid" >> /tmp/adforecast_flip_ids
+            else
+                echo "   · кампания $cid не станет строкой «план против факта»: вердикт $FORECAST_VERDICT"
+            fi
         fi
     done
     FLIP_IDS=$(cat /tmp/adforecast_flip_ids 2>/dev/null | tr '\n' ' ')
@@ -235,7 +252,88 @@ else
     echo "   ⚠ своя модель пока не готова — прогнозы работают на общей"
 fi
 
-# ── 5. Отчёты в истории экспорта ─────────────────────────────────────────
+# ── 5. «План против факта»: кампании с выгрузкой, прогнозом и закрытием ──
+# В отчёт «план против факта» попадают только кампании, по которым был прогноз
+# до закрытия, поэтому одних сгенерированных данных мало: цикл нужно провести
+# целиком — создали, загрузили выгрузку (из неё берётся факт), рассчитали
+# прогноз, завершили. Выгрузки — фикстуры db/generator/exports.
+say "Наполнение «план против факта» (10 кампаний с выгрузками)"
+FIXTURES="$ROOT/db/generator/exports"
+PLAN_FACT="classified_книги_2026|Kufar|sample_upload_1.csv
+search_мебель_2026|Google Ads|sample_upload_2.csv
+social_инструменты_2026|myTarget|sample_upload_3.csv
+search_техника_2026|Яндекс Директ|sample_upload_4.csv
+email_подписка_2026|Email-платформа|sample_upload_5.csv
+social_курсы_2026|Telegram Ads|sample_upload_6.csv
+social_услуги_2026|VK Реклама|scenario_borderline.csv
+seti_товары_2026|Яндекс Директ — сети|scenario_fatigue.csv
+email_программа_2026|Email-платформа|scenario_profitable.csv
+social_недвижимость_2026|myTarget|scenario_unprofitable.csv"
+
+# Кириллица, переданная аргументом curl.exe, искажается (Git Bash отдаёт её в Windows
+# не в UTF-8), поэтому тело запроса уходит потоком: --data-binary @-.
+send_json() { # метод url тело
+    printf '%s' "$3" | curl -s -X "$1" "$2" -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" --data-binary @- || true
+}
+
+PLAN_FACT_ADDED=0
+while IFS='|' read -r name platform file; do
+    [ -n "$name" ] || continue
+    if [ ! -f "$FIXTURES/$file" ]; then
+        echo "   ⚠ нет файла $file — «$name» пропущена"
+        continue
+    fi
+    # < /dev/null обязателен: docker compose exec иначе вычитывает stdin цикла
+    # и цикл обрывается после первой строки
+    EXISTS=$($DB -t -A -c "SELECT count(*) FROM campaigns WHERE organization_id = 1 AND campaign_name = '$name'" < /dev/null)
+    if [ "$EXISTS" != "0" ]; then
+        echo "   · «$name» уже есть — пропускаю"
+        continue
+    fi
+    ACCOUNT=$($DB -t -A -c "SELECT account_id FROM ad_accounts WHERE organization_id = 1 AND platform = '$platform' ORDER BY account_id LIMIT 1" < /dev/null)
+    if [ -z "$ACCOUNT" ]; then
+        echo "   ⚠ нет кабинета «$platform» — «$name» пропущена"
+        continue
+    fi
+
+    # дни, дата первой записи и средний дневной расход — из самой выгрузки
+    read -r days first_day per_day <<< "$(awk -F, 'NR > 1 { n++; cost += $4; if (n == 1) first = $1 } END { printf "%d %s %.2f\n", n, first, cost / n }' "$FIXTURES/$file")"
+    duration=$((days + 30))
+    month=$((10#${first_day:5:2}))
+    # бюджет — тот же дневной темп на всю длительность, но не ниже 15 BYN в день:
+    # при слишком малом дневном бюджете прогноз вернёт предупреждение и в отчёт не попадёт
+    budget=$(awk -v p="$per_day" -v d="$duration" 'BEGIN { if (p < 15) p = 15; printf "%.2f", p * d }')
+
+    CREATE=$(send_json POST "$API/campaigns" "{\"accountId\":$ACCOUNT,\"campaignName\":\"$name\",\"budget\":$budget,\"currency\":\"BYN\"}")
+    CID=$(echo "$CREATE" | sed -n 's/.*"id":\([0-9]*\).*/\1/p')
+    if [ -z "$CID" ]; then
+        echo "   ✕ «$name»: не удалось создать кампанию ($(echo "$CREATE" | head -c 120))"
+        continue
+    fi
+    # кампания с данными должна побыть активной, затем закрывается
+    send_json PUT "$API/campaigns/$CID" "{\"campaignName\":\"$name\",\"budget\":$budget,\"currency\":\"BYN\",\"status\":\"ACTIVE\"}" > /dev/null
+    UPLOAD=$(curl -s -X POST "$API/campaigns/$CID/uploads" -H "Authorization: Bearer $TOKEN" \
+        -F "file=@$FIXTURES/$file" < /dev/null || true)
+    ROWS=$(echo "$UPLOAD" | sed -n 's/.*"rowsCount":\([0-9]*\).*/\1/p')
+    if [ -z "$ROWS" ]; then
+        echo "   ✕ «$name»: выгрузка не принята ($(echo "$UPLOAD" | head -c 120))"
+        continue
+    fi
+    RESULT=$(send_json POST "$API/campaigns/$CID/forecasts" "{\"durationDays\":$duration,\"startMonth\":$month}")
+    VERDICT=$(echo "$RESULT" | sed -n 's/.*"verdict":"\([^"]*\)".*/\1/p')
+    send_json PUT "$API/campaigns/$CID" "{\"campaignName\":\"$name\",\"budget\":$budget,\"currency\":\"BYN\",\"status\":\"FINISHED\"}" > /dev/null
+    echo "   + «$name» ($platform): $days дн. данных, бюджет $budget BYN, прогноз на $duration дн. — $VERDICT"
+    PLAN_FACT_ADDED=$((PLAN_FACT_ADDED + 1))
+done <<< "$PLAN_FACT"
+echo "   добавлено кампаний: $PLAN_FACT_ADDED; в отчёте всего: $($DB -t -A -c "
+    SELECT count(*) FROM campaigns c
+    WHERE c.organization_id = 1 AND c.status = 'FINISHED'
+      AND EXISTS (SELECT 1 FROM forecasts f JOIN forecast_results r ON r.forecast_id = f.forecast_id
+                  WHERE f.campaign_id = c.campaign_id AND f.status = 'COMPLETED'
+                    AND r.verdict IN ('PROFITABLE', 'BORDERLINE', 'UNPROFITABLE'))")"
+
+# ── 6. Отчёты в истории экспорта ─────────────────────────────────────────
 EXPORTS=$($DB -t -A -c "SELECT count(*) FROM export_history")
 if [ "$EXPORTS" -ge 3 ]; then
     echo "── Отчёты уже выгружались ($EXPORTS) — пропускаю"

@@ -2,6 +2,7 @@ package by.bsuir.adforecast.campaign;
 
 import by.bsuir.adforecast.security.AuthPrincipal;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -10,6 +11,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -43,6 +45,7 @@ public class CampaignController {
     }
 
     @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAuthority('campaign.manage')")
     public CampaignSummaryResponse create(@Valid @RequestBody CampaignCreateRequest request,
                                           Authentication authentication) {

@@ -142,13 +142,20 @@ def train_ensemble(
     metrics_history = _metrics(actual[with_history], mean_predictions[with_history]) if with_history.any() else None
     metrics_planned = _metrics(actual[~with_history], mean_predictions[~with_history]) if (~with_history).any() else None
 
-    # калибровка интервала: во сколько раз членский разброс надо увеличить,
-    # чтобы интервал ±k·spread покрывал заданную долю фактических ошибок
+    # Калибровка интервала: во сколько раз членский разброс надо увеличить, чтобы
+    # интервал ±k·spread покрывал заданную долю фактических ошибок. Считаем отдельно
+    # для кампаний с историей и без неё: у плана ошибка заметно шире, общая
+    # калибровка давала по нему недобор покрытия (75 % вместо 80 %).
     spread = member_predictions.std(axis=0)
     errors = np.abs(actual - mean_predictions)
     ratios = errors / np.maximum(spread, 1e-6)
+    planned = ~with_history
     calibration = float(np.quantile(ratios, INTERVAL_COVERAGE))
     absolute_floor = float(np.quantile(errors, INTERVAL_COVERAGE))
+    calibration_history = float(np.quantile(ratios[with_history], INTERVAL_COVERAGE)) if with_history.any() else calibration
+    floor_history = float(np.quantile(errors[with_history], INTERVAL_COVERAGE)) if with_history.any() else absolute_floor
+    calibration_planned = float(np.quantile(ratios[planned], INTERVAL_COVERAGE)) if planned.any() else calibration
+    floor_planned = float(np.quantile(errors[planned], INTERVAL_COVERAGE)) if planned.any() else absolute_floor
 
     budgets = np.array([record["budget"] for record in train_records])
     day_budgets = np.array([record["budget"] / record["duration_days"] for record in train_records])
@@ -178,8 +185,20 @@ def train_ensemble(
         "r2_planned": None if metrics_planned is None else metrics_planned["r2"],
         "interval_calibration": round(calibration, 3),
         "interval_absolute_floor": round(absolute_floor, 4),
+        "interval_calibration_history": round(calibration_history, 3),
+        "interval_floor_history": round(floor_history, 4),
+        "interval_calibration_planned": round(calibration_planned, 3),
+        "interval_floor_planned": round(floor_planned, 4),
     }
     return Ensemble(version=version, members=members, meta=meta)
+
+
+def has_history(record: dict) -> bool:
+    """Есть ли данные кампании на дату прогноза (то же условие, что в _common)."""
+    observed = record.get("observed")
+    if observed is not None:
+        return float(observed.get("days") or 0) > 0
+    return float(record.get("cutoff_days") or 0) > 0
 
 
 def predict_ensemble(ensemble: Ensemble, record: dict) -> dict:
@@ -189,8 +208,18 @@ def predict_ensemble(ensemble: Ensemble, record: dict) -> dict:
     spread = float(member_values.std())
     tolerance = max(0.1 * mean, 0.05)
     agreement = float(np.mean(np.abs(member_values - mean) <= tolerance))
-    calibration = ensemble.meta.get("interval_calibration", 2.0)
-    floor = ensemble.meta.get("interval_absolute_floor", 0.1)
+    # ширина интервала калибруется отдельно для плана и для кампаний с историей;
+    # старые модели без этих ключей используют общую калибровку
+    if has_history(record):
+        calibration = ensemble.meta.get("interval_calibration_history",
+                                        ensemble.meta.get("interval_calibration", 2.0))
+        floor = ensemble.meta.get("interval_floor_history",
+                                  ensemble.meta.get("interval_absolute_floor", 0.1))
+    else:
+        calibration = ensemble.meta.get("interval_calibration_planned",
+                                        ensemble.meta.get("interval_calibration", 2.0))
+        floor = ensemble.meta.get("interval_floor_planned",
+                                  ensemble.meta.get("interval_absolute_floor", 0.1))
     half_width = max(calibration * spread, 0.25 * floor)
     return {
         "payback_ratio": round(mean, 4),

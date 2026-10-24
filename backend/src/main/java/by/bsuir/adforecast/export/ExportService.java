@@ -108,6 +108,9 @@ public class ExportService {
             case "PROFITABLE" -> "вкладываться";
             case "BORDERLINE" -> "на грани окупаемости";
             case "UNPROFITABLE" -> "убыточно";
+            case "OUT_OF_RANGE" -> "прогноз недостоверен: бюджет вне данных модели";
+            case "BELOW_MINIMUM" -> "бюджет ниже минимума площадки";
+            case "NO_CHANNEL_DATA" -> "по каналу нет данных для прогноза";
             default -> "—";
         };
         String budgetRange;

@@ -39,17 +39,22 @@ from pathlib import Path
 # Базовая окупаемость — типичный атрибутированный ROAS канала: ориентиры Triple Whale
 # и MetricNexus (Google 3,3–3,8, Meta 1,9–3,2, TikTok 2,1) снижены для малого и среднего
 # бизнеса Беларуси, где бюджет и объёмы заказов меньше.
+# Последний элемент — минимальный дневной бюджет площадки: ниже него объявления
+# не показываются, и такой план в реальности не запустился бы (те же значения, что в
+# PlatformCatalog на бэкенде). Кампании дешевле генератор не создаёт.
 PLATFORMS = [
-    ("Яндекс Директ", "search", 0.055, 1.46, 1.60, 0.20, 0.30),
-    ("Яндекс Директ — сети", "social", 0.007, 0.31, 1.05, 0.22, 0.35),
-    ("Google Ads", "search", 0.063, 1.05, 1.70, 0.18, 0.28),
-    ("VK Реклама", "social", 0.0097, 0.33, 1.20, 0.22, 0.35),
-    ("myTarget", "social", 0.008, 0.73, 1.10, 0.22, 0.35),
-    ("Telegram Ads", "social", 0.010, 0.33, 0.95, 0.25, 0.40),
-    ("TikTok Ads", "social", 0.0112, 1.84, 1.00, 0.24, 0.42),
-    ("Kufar", "classified", 0.015, 0.80, 1.30, 0.20, 0.30),
-    ("Email-платформа", "email", 0.030, 0.02, 2.60, 0.15, 0.20),
+    ("Яндекс Директ", "search", 0.055, 1.46, 1.60, 0.20, 0.30, 10.0),
+    ("Яндекс Директ — сети", "social", 0.007, 0.31, 1.05, 0.22, 0.35, 10.0),
+    ("Google Ads", "search", 0.063, 1.05, 1.70, 0.18, 0.28, 10.0),
+    ("VK Реклама", "social", 0.0097, 0.33, 1.20, 0.22, 0.35, 10.0),
+    ("myTarget", "social", 0.008, 0.73, 1.10, 0.22, 0.35, 10.0),
+    ("Telegram Ads", "social", 0.010, 0.33, 0.95, 0.25, 0.40, 10.0),
+    ("TikTok Ads", "social", 0.0112, 1.84, 1.00, 0.24, 0.42, 148.0),
+    ("Kufar", "classified", 0.015, 0.80, 1.30, 0.20, 0.30, 10.0),
+    ("Email-платформа", "email", 0.030, 0.02, 2.60, 0.15, 0.20, 0.0),
 ]
+
+MIN_DAY_BUDGET = 7  # индекс минимального дневного бюджета в PLATFORMS
 
 NICHES = [
     "электроника",
@@ -105,7 +110,7 @@ def fatigue_factor(day_index: int, duration: int, slope: float) -> float:
 
 def daily_row(rng: random.Random, platform: tuple, day_budget: float, day: date,
               day_index: int, duration: int, campaign_noise: float) -> tuple:
-    _, _, ctr, cpc, base_ratio, gamma, fatigue_rate = platform
+    _, _, ctr, cpc, base_ratio, gamma, fatigue_rate, *_ = platform
     cost_noise = lognormal(rng, 0.03)
     ramp = min(1.0, (day_index + 1) / 3)
     cost = round(day_budget * cost_noise * ramp, 2)
@@ -147,6 +152,9 @@ def build_campaign(rng: random.Random, campaign_id: int, account_id: int, status
     # от 300 BYN — реальный минимум бюджета на систему в Беларуси (ECOM Digital, 2026)
     budget = round(math.exp(rng.uniform(math.log(600), math.log(60000))), 2)
     day_budget = budget / duration
+    if day_budget < platform[MIN_DAY_BUDGET]:
+        day_budget = platform[MIN_DAY_BUDGET]
+        budget = round(day_budget * duration, 2)
     campaign_noise = lognormal(rng, noise)
     niche = NICHES[rng.randrange(len(NICHES))]
     name = f"{platform[1]}_{niche}_{start.year if start else today.year}"

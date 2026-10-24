@@ -53,6 +53,9 @@ public class ForecastService {
     /** Константа плавного смешивания: вес своей модели = n / (n + K). */
     private static final double OWN_HISTORY_CONSTANT = 25.0;
 
+    /** Порог обучения модели организации — совпадает с TrainingService.MIN_CAMPAIGNS. */
+    private static final int MIN_CAMPAIGNS_FOR_OWN_MODEL = 10;
+
     /** Дневной бюджет, ниже которого рекламные площадки не показывают объявления. */
     private static final double MIN_MEANINGFUL_DAY_BUDGET = 20.0;
     private static final double DAYS_PER_MONTH = 30.44;
@@ -192,26 +195,16 @@ public class ForecastService {
             ForecastResult result = new ForecastResult();
             result.setForecast(forecast);
             result.setVerdict(prediction.verdict());
-            result.setPaybackRatio(toRatio(prediction.ratio()));
-            result.setForecastRoi(BigDecimal.valueOf((prediction.ratio() - 1.0) * 100).setScale(2, RoundingMode.HALF_UP));
-            result.setIntervalLower(BigDecimal.valueOf(prediction.lower()).setScale(4, RoundingMode.HALF_UP));
-            result.setIntervalUpper(BigDecimal.valueOf(prediction.upper()).setScale(4, RoundingMode.HALF_UP));
-            result.setAgreement(prediction.baseline()
-                    ? null
-                    : BigDecimal.valueOf(prediction.agreement()).setScale(2, RoundingMode.HALF_UP));
-            result.setPaybackDays(prediction.paybackDays() == null
-                    ? null : BigDecimal.valueOf(prediction.paybackDays()).setScale(1, RoundingMode.HALF_UP));
-            result.setPaybackMonths(prediction.paybackDays() == null
-                    ? null : BigDecimal.valueOf(prediction.paybackDays() / DAYS_PER_MONTH).setScale(2, RoundingMode.HALF_UP));
-            result.setExpectedProfit(campaign.getBudget().multiply(BigDecimal.valueOf(prediction.ratio() - 1.0))
-                    .setScale(2, RoundingMode.HALF_UP));
-            // денежные ответы модели — в BYN, показываем в валюте кампании
-            result.setBudgetMin(prediction.budgetMin() == null
-                    ? null : CurrencyRates.fromBase(campaign.getCurrency(), prediction.budgetMin()));
-            result.setBudgetMax(prediction.budgetMax() == null
-                    ? null : CurrencyRates.fromBase(campaign.getCurrency(), prediction.budgetMax()));
+            // Вердикт-предупреждение числовой оценки не содержит: пустые поля честнее фиктивных.
+            // Иначе коэффициент 0 превращался в ROI −100 %, и это уходило в «план против факта»,
+            // отчёты и счётчик успешных прогнозов.
+            if (numericVerdict(prediction.verdict())) {
+                fillNumbers(result, campaign, prediction);
+            }
             result.setBudgetAny(prediction.budgetAny());
             result.setModelScope(scope);
+            // границы дневного бюджета обучающих данных значимы и в предупреждении:
+            // по ним видно, какой бюджет модель вообще способна оценить
             result.setDayBudgetMin(prediction.dayBudgetMin() == null
                     ? null : CurrencyRates.fromBase(campaign.getCurrency(), prediction.dayBudgetMin()));
             result.setDayBudgetMax(prediction.dayBudgetMax() == null
@@ -219,7 +212,6 @@ public class ForecastService {
             result.setDataNote(truncate(prediction.dataNote()));
             result.setOwnWeight(BigDecimal.valueOf(prediction.ownWeight()).setScale(3, RoundingMode.HALF_UP));
             result.setOwnModel(prediction.ownModel());
-            result.setMape(prediction.dominantModel().getQualityMetric());
             forecastResultRepository.save(result);
 
             forecast.setStatus(ForecastStatus.COMPLETED);
@@ -334,7 +326,7 @@ public class ForecastService {
                     prediction.paybackDays() == null
                             ? null
                             : BigDecimal.valueOf(prediction.paybackDays() / DAYS_PER_MONTH).setScale(2, RoundingMode.HALF_UP),
-                    prediction.paybackDays() != null,
+                    prediction.paybackDays() != null && prediction.paybackDays() <= variant.durationDays(),
                     prediction.budgetMin() == null ? null : BigDecimal.valueOf(prediction.budgetMin()),
                     prediction.budgetMax() == null ? null : BigDecimal.valueOf(prediction.budgetMax()),
                     prediction.budgetAny(),
@@ -427,10 +419,10 @@ public class ForecastService {
         if (generalPrediction != null && generalPrediction.platformUnknown()) {
             generalPrediction = null;
         }
+        // обе модели отказались по одной причине: канала нет в их обучающих данных.
+        // Подменять отказ усреднённой оценкой по другим кампаниям нельзя — пользователь
+        // прочитает её как расчёт по этому каналу.
         if (ownPrediction == null && generalPrediction == null) {
-            if (own != null) {
-                return baselinePrediction(organizationId, budget, duration, snapshot, ownCampaigns, general);
-            }
             return warning("NO_CHANNEL_DATA", general, own, ownCampaigns,
                     "канал «" + command.platform() + "» пока не встречался в данных модели — прогноз по нему невозможен",
                     "Общая модель знает только каналы из своих обучающих данных. Своя модель обучится"
@@ -550,8 +542,10 @@ public class ForecastService {
         String campaigns = points.size() == 1
                 ? "одной вашей кампании"
                 : points.size() + " вашим кампаниям";
-        String basis = "оценка по " + campaigns + " (своя модель ещё не обучена — нужно 10 завершённых кампаний, "
-                + "сейчас " + ownCampaigns + ")";
+        String basis = "оценка по " + campaigns + (ownCampaigns >= MIN_CAMPAIGNS_FOR_OWN_MODEL
+                ? " (своя модель ещё не готова — обучение не завершилось)"
+                : " (своя модель ещё не обучена — нужно " + MIN_CAMPAIGNS_FOR_OWN_MODEL
+                        + " завершённых кампаний, сейчас " + ownCampaigns + ")");
         String dataNote = points.size() < 3
                 ? "данных очень мало: оценка — это средняя окупаемость по вашим выгрузкам, а не прогноз по параметрам"
                         + " кампании; ориентируйтесь на интервал"
@@ -723,6 +717,37 @@ public class ForecastService {
 
     static String ownModelName(long organizationId) {
         return "adforecast_org_" + organizationId;
+    }
+
+    /** Числовые поля результата — только у прогнозов, содержащих оценку. */
+    private void fillNumbers(ForecastResult result, Campaign campaign, Prediction prediction) {
+        result.setPaybackRatio(toRatio(prediction.ratio()));
+        result.setForecastRoi(BigDecimal.valueOf((prediction.ratio() - 1.0) * 100).setScale(2, RoundingMode.HALF_UP));
+        result.setIntervalLower(BigDecimal.valueOf(prediction.lower()).setScale(4, RoundingMode.HALF_UP));
+        result.setIntervalUpper(BigDecimal.valueOf(prediction.upper()).setScale(4, RoundingMode.HALF_UP));
+        result.setAgreement(prediction.baseline()
+                ? null
+                : BigDecimal.valueOf(prediction.agreement()).setScale(2, RoundingMode.HALF_UP));
+        result.setPaybackDays(prediction.paybackDays() == null
+                ? null : BigDecimal.valueOf(prediction.paybackDays()).setScale(1, RoundingMode.HALF_UP));
+        result.setPaybackMonths(prediction.paybackDays() == null
+                ? null : BigDecimal.valueOf(prediction.paybackDays() / DAYS_PER_MONTH).setScale(2, RoundingMode.HALF_UP));
+        result.setExpectedProfit(campaign.getBudget().multiply(BigDecimal.valueOf(prediction.ratio() - 1.0))
+                .setScale(2, RoundingMode.HALF_UP));
+        // денежные ответы модели — в BYN, показываем в валюте кампании
+        result.setBudgetMin(prediction.budgetMin() == null
+                ? null : CurrencyRates.fromBase(campaign.getCurrency(), prediction.budgetMin()));
+        result.setBudgetMax(prediction.budgetMax() == null
+                ? null : CurrencyRates.fromBase(campaign.getCurrency(), prediction.budgetMax()));
+        result.setMape(prediction.dominantModel().getQualityMetric());
+    }
+
+    /** Вердикты с числовой оценкой: «ниже минимума площадки» и «вне данных модели» её не дают. */
+    static boolean numericVerdict(String verdict) {
+        return switch (verdict) {
+            case "PROFITABLE", "BORDERLINE", "UNPROFITABLE" -> true;
+            default -> false;
+        };
     }
 
     private BigDecimal toRatio(double ratio) {
