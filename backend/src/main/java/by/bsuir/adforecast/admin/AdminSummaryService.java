@@ -59,7 +59,8 @@ public class AdminSummaryService {
                 ((Number) counts.get("forecasts_completed")).longValue(),
                 ((Number) counts.get("uploads_total")).longValue(),
                 ((Number) counts.get("exports_total")).longValue(),
-                mlModelRepository.count(),
+                // «Версий в реестре» — только общая модель: модели организаций в админке не показываются
+                mlModelRepository.countByOrganizationIdIsNull(),
                 mlAvailable,
                 active == null ? null : active.getModelVersion(),
                 active == null ? null : active.getTrainedAt(),

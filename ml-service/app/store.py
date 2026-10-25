@@ -55,6 +55,15 @@ class ModelStore:
         )
         return directory
 
+    def delete(self, model_name: str, version: str) -> None:
+        directory = self._base(model_name) / version
+        if version not in self.versions(model_name):
+            raise ValueError(f"версия не найдена: {version}")
+        for path in directory.iterdir():
+            if path.is_file():
+                path.unlink()
+        directory.rmdir()
+
     def load(self, version: str, model_name: str = DEFAULT_MODEL_NAME) -> Ensemble:
         directory = self._base(model_name) / version
         meta = json.loads((directory / "meta.json").read_text(encoding="utf-8"))

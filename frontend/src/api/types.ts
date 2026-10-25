@@ -351,12 +351,6 @@ export interface AdminModel {
   snapshot: ModelSnapshot | null
 }
 
-export interface BackupEntry {
-  name: string
-  size: number
-  lastModified: string
-}
-
 export interface TrainingPreviewRow {
   id: number
   name: string
@@ -364,6 +358,8 @@ export interface TrainingPreviewRow {
   budget: string
   days: number
   ratio: string
+  periodStart: string
+  periodEnd: string
 }
 
 export interface TrainingPreview {
@@ -373,7 +369,7 @@ export interface TrainingPreview {
   periodStart: string
   periodEnd: string
   included: TrainingPreviewRow[]
-  excluded: { id: number; name: string; platform: string; inTraining: boolean; isTest: boolean }[]
+  excluded: { id: number; name: string; platform: string; inTraining: boolean; isTest: boolean; days: number; periodStart: string; periodEnd: string }[]
 }
 
 export interface TrainingTaskModel {
@@ -404,4 +400,27 @@ export interface AdminModelsResponse {
   models: AdminModel[]
   organizationsTotal: number
   organizationsWithOwnModel: number
+}
+
+export interface AdminActivityGroup {
+  category: string
+  label: string
+  count: number
+}
+
+export interface AdminActivity {
+  total: number
+  groups: AdminActivityGroup[]
+}
+
+export type ActivityUnit = 'hour' | 'day' | 'week' | 'month'
+
+export interface ActivityPeriod {
+  from: string
+  to: string
+  count: number
+}
+
+export interface AdminActivityPeriods {
+  periods: ActivityPeriod[]
 }

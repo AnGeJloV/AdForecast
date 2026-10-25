@@ -57,6 +57,14 @@ def create_app() -> FastAPI:
     def models() -> schemas.ModelListResponse:
         return schemas.ModelListResponse(models=[schemas.ModelMetrics(**meta) for meta in service.store.list()])
 
+    @app.delete("/models/{model_name}/{version}", status_code=204)
+    def delete_model(model_name: str, version: str) -> None:
+        # отсутствующая/сиротская версия удалению уже не подлежит — считаем успехом
+        try:
+            service.store.delete(model_name, version)
+        except ValueError:
+            pass
+
     return app
 
 

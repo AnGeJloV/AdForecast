@@ -43,11 +43,28 @@ export function fmtPercent(fraction: number | null | undefined): string {
   return `${Math.round(fraction * 100)} %`
 }
 
+/** Моменты из API сервер отдаёт в UTC без зоны (Java LocalDateTime в UTC-контейнере).
+ *  Браузер трактует строку без зоны как «местное время», из-за чего время сдвигалось
+ *  на часовой пояс сервера. Интерпретируем такие строки как UTC — тогда отображение
+ *  даёт локальное время пользователя (для Минска и Москвы это UTC+3). */
+export function parseApiTime(value: string): Date {
+  const trimmed = value.trim()
+  // дата без времени: интерпретируем как полночь UTC, чтобы не сдвинуть календарную дату
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return new Date(`${trimmed}T00:00:00Z`)
+  }
+  const hasZone = /(z|[+-]\d{2}:?\d{2})$/i.test(trimmed)
+  const normalized = trimmed.replace(/(\.\d{3})\d+/, '$1')
+  const source = hasZone ? normalized : `${normalized}Z`
+  const date = new Date(source)
+  return Number.isNaN(date.getTime()) ? new Date(value) : date
+}
+
 export function fmtDate(iso: string | null | undefined): string {
   if (!iso) {
     return '—'
   }
-  const date = new Date(iso)
+  const date = parseApiTime(iso)
   if (Number.isNaN(date.getTime())) {
     return '—'
   }
@@ -58,7 +75,7 @@ export function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) {
     return '—'
   }
-  const date = new Date(iso)
+  const date = parseApiTime(iso)
   if (Number.isNaN(date.getTime())) {
     return '—'
   }

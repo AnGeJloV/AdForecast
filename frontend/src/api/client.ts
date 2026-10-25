@@ -1,10 +1,12 @@
 import type {
   AdAccount,
+  AdminActivity,
+  AdminActivityPeriods,
   AdminCampaignInsight,
   AdminSummary,
+  ActivityUnit,
   AnalyzeResponse,
   AuditEntry,
-  BackupEntry,
   CampaignCreateRequest,
   CampaignDetail,
   CampaignSummary,
@@ -33,6 +35,9 @@ import type {
 } from './types'
 
 const TOKEN_KEY = 'adforecast.token'
+
+/** Времена сервер хранит в UTC; этот часовой пояс нужен и для отображения, и для поиска по ним. */
+const CLIENT_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
 
 export class ApiError extends Error {
   status: number
@@ -103,7 +108,12 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (response.status === 204) {
     return undefined as T
   }
-  return response.json() as Promise<T>
+  // void-эндпоинты бэкенда отвечают 200 с пустым телом — трактуем так же, как 204
+  const text = await response.text()
+  if (!text) {
+    return undefined as T
+  }
+  return JSON.parse(text) as T
 }
 
 export async function downloadFile(path: string, fallbackName: string) {
@@ -202,17 +212,30 @@ export const api = {
     request<UserItem>(`/api/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   adminSummary: () => request<AdminSummary>('/api/admin/summary'),
+  adminActivity: (from: string | null, to: string | null) => {
+    const query = new URLSearchParams()
+    if (from) query.set('from', from)
+    if (to) query.set('to', to)
+    const suffix = query.toString()
+    return request<AdminActivity>(`/api/admin/activity${suffix ? `?${suffix}` : ''}`)
+  },
+  adminActivityPeriods: (unit: ActivityUnit, timeZone: string) =>
+    request<AdminActivityPeriods>(
+      `/api/admin/activity/periods?unit=${unit}&tz=${encodeURIComponent(timeZone)}`,
+    ),
   adminCampaign: (id: number) => request<AdminCampaignInsight>(`/api/admin/campaigns/${id}`),
   audit: (page: number, size: number, category = 'all', search = '', sort = '', direction = '') =>
     request<Page<AuditEntry>>(
       `/api/admin/audit?page=${page}&size=${size}&category=${encodeURIComponent(category)}`
-      + `&search=${encodeURIComponent(search)}&sort=${encodeURIComponent(sort)}&direction=${direction}`,
+      + `&search=${encodeURIComponent(search)}&sort=${encodeURIComponent(sort)}&direction=${direction}`
+      + `&tz=${encodeURIComponent(CLIENT_TIME_ZONE)}`,
     ),
   logout: () => request<void>('/api/auth/logout', { method: 'POST' }),
   adminModels: () => request<AdminModelsResponse>('/api/admin/models'),
   activateModel: (modelId: number) =>
     request<void>(`/api/admin/models/${modelId}/activate`, { method: 'POST' }),
-  backups: () => request<BackupEntry[]>('/api/admin/backups'),
+  deleteModel: (modelId: number) =>
+    request<void>(`/api/admin/models/${modelId}`, { method: 'DELETE' }),
   trainingPreview: () => request<TrainingPreview>('/api/admin/training/preview'),
   updateTrainingFlags: (id: number, data: { inTraining: boolean; isTest: boolean; reason: string }) =>
     request<void>(`/api/admin/training/campaigns/${id}/flags`, { method: 'PUT', body: JSON.stringify(data) }),

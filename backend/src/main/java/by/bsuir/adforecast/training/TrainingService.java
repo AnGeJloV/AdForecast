@@ -90,7 +90,15 @@ public class TrainingService {
                    c.campaign_name AS campaign_name,
                    a.platform AS platform,
                    c.in_training AS in_training,
-                   c.is_test AS is_test
+                   c.is_test AS is_test,
+                   (SELECT count(DISTINCT m.metric_date)
+                    FROM uploads u
+                    JOIN daily_metrics m ON m.upload_id = u.upload_id
+                    WHERE u.campaign_id = c.campaign_id) AS days,
+                   (SELECT min(u.period_start) FROM uploads u
+                    WHERE u.campaign_id = c.campaign_id) AS period_start,
+                   (SELECT max(u.period_end) FROM uploads u
+                    WHERE u.campaign_id = c.campaign_id) AS period_end
             FROM campaigns c
             JOIN ad_accounts a ON a.account_id = c.account_id
             WHERE c.status = 'FINISHED'
@@ -176,13 +184,18 @@ public class TrainingService {
                         String.valueOf(row.get("platform")),
                         ((BigDecimal) row.get("budget")).toPlainString(),
                         ((Number) row.get("days")).longValue(),
-                        String.valueOf(row.get("ratio")))).toList(),
+                        String.valueOf(row.get("ratio")),
+                        text(row.get("period_start")),
+                        text(row.get("period_end")))).toList(),
                 excluded.stream().map(row -> new TrainingPreviewResponse.ExcludedCampaign(
                         ((Number) row.get("campaign_id")).longValue(),
                         String.valueOf(row.get("campaign_name")),
                         String.valueOf(row.get("platform")),
                         Boolean.TRUE.equals(row.get("in_training")),
-                        Boolean.TRUE.equals(row.get("is_test")))).toList()
+                        Boolean.TRUE.equals(row.get("is_test")),
+                        ((Number) row.get("days")).longValue(),
+                        text(row.get("period_start")),
+                        text(row.get("period_end")))).toList()
         );
     }
 
@@ -420,6 +433,10 @@ public class TrainingService {
         } catch (NoSuchAlgorithmException exception) {
             throw new MlServiceException("не удалось вычислить хэш датасета", exception);
         }
+    }
+
+    private static String text(Object value) {
+        return value == null ? null : String.valueOf(value);
     }
 
     private record CutoffRecord(long campaignId, String platform, double budget, int durationDays, int startMonth,

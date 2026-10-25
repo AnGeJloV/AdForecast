@@ -16,9 +16,10 @@ public record TrainingPreviewResponse(
     }
 
     public record IncludedCampaign(long id, String name, String platform, String budget,
-                                   long days, String ratio) {
+                                   long days, String ratio, String periodStart, String periodEnd) {
     }
 
-    public record ExcludedCampaign(long id, String name, String platform, boolean inTraining, boolean isTest) {
+    public record ExcludedCampaign(long id, String name, String platform, boolean inTraining, boolean isTest,
+                                   long days, String periodStart, String periodEnd) {
     }
 }

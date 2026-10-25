@@ -6,13 +6,15 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.DateTimeException;
+import java.time.ZoneId;
 import java.util.Set;
 
 @RestController
 @RequestMapping("/api/admin/audit")
 public class AuditController {
 
-    private static final Set<String> CATEGORIES = Set.of("all", "users", "data", "models", "backups");
+    private static final Set<String> CATEGORIES = Set.of("all", "users", "data", "models");
 
     private final AuditLogRepository auditLogRepository;
 
@@ -27,11 +29,25 @@ public class AuditController {
                                                     @RequestParam(defaultValue = "all") String category,
                                                     @RequestParam(defaultValue = "") String search,
                                                     @RequestParam(defaultValue = "") String sort,
-                                                    @RequestParam(defaultValue = "") String direction) {
+                                                    @RequestParam(defaultValue = "") String direction,
+                                                    @RequestParam(defaultValue = "") String tz) {
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), 200);
         String safeCategory = CATEGORIES.contains(category) ? category : "all";
-        return PageResponse.of(auditLogRepository.search(safeCategory, likePattern(search), sort, direction, safePage, safeSize));
+        return PageResponse.of(auditLogRepository
+                .search(safeCategory, likePattern(search), sort, direction, zone(tz), safePage, safeSize));
+    }
+
+    /** Поиск по времени журнала идёт в том же поясе, в котором время показано на экране. */
+    private static String zone(String tz) {
+        if (tz == null || tz.isBlank()) {
+            return "UTC";
+        }
+        try {
+            return ZoneId.of(tz).getId();
+        } catch (DateTimeException exception) {
+            throw new IllegalArgumentException("неизвестный часовой пояс: " + tz);
+        }
     }
 
     private static String likePattern(String search) {

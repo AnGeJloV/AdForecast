@@ -99,6 +99,22 @@ public class AdminModelService {
                         + (previous == null ? "—" : previous));
     }
 
+    @Transactional
+    public void delete(long modelId, long adminId) {
+        MlModel target = mlModelRepository.findById(modelId)
+                .orElseThrow(() -> new EntityNotFoundException("версия модели не найдена"));
+        if (Boolean.TRUE.equals(target.getIsActive())) {
+            throw new IllegalStateException("нельзя удалить активную версию модели — сначала откатитесь на другую");
+        }
+        String version = target.getModelVersion();
+        String scopeName = target.getOrganization() == null
+                ? "общая" : "организации «" + target.getOrganization().getName() + "»";
+        mlServiceClient.deleteModel(target.getModelName(), version);
+        mlModelRepository.delete(target);
+        auditService.record(adminId, "удаление версии модели", "модель", modelId,
+                "версия " + version + " (" + scopeName + ")");
+    }
+
     private AdminModelResponse.DatasetSnapshotResponse snapshot(MlModelInfo info) {
         if (info == null || info.datasetSnapshot() == null) {
             return null;

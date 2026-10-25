@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
-import { api, ApiError, downloadFile } from '../api/client'
+import { api, ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import type {
+  ActivityPeriod,
+  AdminActivity,
   AdminCampaignInsight,
   AdminModel,
   AdminSummary,
   AuditEntry,
-  BackupEntry,
   AdminModelsResponse,
   DailyMetricPoint,
   Page,
@@ -24,9 +25,9 @@ import { SortTh, useSortTable } from '../components/SortableTable'
 import type { SortColumn, SortTable } from '../components/SortableTable'
 import { Select } from '../components/Select'
 import { EmptyState, ErrorBox, PageLoader, Pager, StatusPill } from '../components/Ui'
-import { fmtCoef, fmtDate, fmtDateTime, fmtDays, fmtDecimal, fmtMoney, fmtNum, fmtRatio, initials, plural, rangeLabel, verdictLabel, verdictTone } from '../utils/format'
+import { fmtCoef, fmtDate, fmtDateTime, fmtDays, fmtDecimal, fmtMoney, fmtNum, fmtRatio, initials, MONTHS, plural, rangeLabel, verdictLabel, verdictTone } from '../utils/format'
 
-type Tab = 'summary' | 'users' | 'audit' | 'models' | 'backup'
+type Tab = 'summary' | 'users' | 'audit' | 'models'
 
 const TABS: { id: Tab; label: string; title: string; sub: string }[] = [
   {
@@ -52,12 +53,6 @@ const TABS: { id: Tab; label: string; title: string; sub: string }[] = [
     label: 'Модели и обучение',
     title: 'Модели прогнозирования',
     sub: 'версии модели, обучение по выборке и активная версия',
-  },
-  {
-    id: 'backup',
-    label: 'Резервные копии',
-    title: 'Резервные копии базы',
-    sub: 'создание копий с хоста и выгрузка архивов',
   },
 ]
 
@@ -91,7 +86,6 @@ export function AdminPage() {
       {tab === 'users' && <UsersTab />}
       {tab === 'audit' && <AuditTab onOpenCampaign={setInsightId} />}
       {tab === 'models' && <ModelsTab onOpenCampaign={setInsightId} />}
-      {tab === 'backup' && <BackupsTab />}
 
       <CampaignInsightModal campaignId={insightId} onClose={() => setInsightId(null)} />
     </Layout>
@@ -100,43 +94,74 @@ export function AdminPage() {
 
 /* ===================== СВОДКА ===================== */
 
-/**
- * Группа действия для круговой диаграммы. Раньше распознавались только загрузки
- * и обучение, поэтому прогнозы, кампании и входы сваливались в «прочее».
- */
-function auditCategory(action: string): string {
-  if (action.includes('кампани')) return 'кампании'
-  if (action.includes('прогноз')) return 'прогнозы'
-  if (action.includes('загрузка') || action.includes('отчёт') || action.includes('отчет')
-    || action.includes('резервн') || action.includes('копи')) return 'данные'
-  if (action.includes('обучени') || action.includes('модел')) return 'модели'
-  if (action.includes('вход') || action.includes('выход') || action.includes('регистрац')
-    || action.includes('пользовател') || action.includes('блокировк')) return 'пользователи'
-  return 'прочее'
-}
+type ActivityScope = 'hour' | 'day' | 'week' | 'month' | 'all'
 
-const CATEGORY_LABELS: Record<string, string> = {
-  'кампании': 'кампании',
-  'прогнозы': 'прогнозы',
-  'данные': 'данные и отчёты',
-  'модели': 'модели и обучение',
-  'пользователи': 'входы и учётные записи',
-  'прочее': 'прочее',
+const ACTIVITY_SCOPES: { value: ActivityScope; label: string }[] = [
+  { value: 'hour', label: 'час' },
+  { value: 'day', label: 'день' },
+  { value: 'week', label: 'неделя' },
+  { value: 'month', label: 'месяц' },
+  { value: 'all', label: 'всё время' },
+]
+
+const ACTIVITY_SCOPE_LABELS: Record<Exclude<ActivityScope, 'all'>, string> = {
+  hour: 'за час',
+  day: 'за день',
+  week: 'за неделю',
+  month: 'за месяц',
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
-  'кампании': CHART_COLORS.accent,
-  'прогнозы': CHART_COLORS.ok,
-  'данные': CHART_COLORS.info,
-  'модели': CHART_COLORS.violet,
-  'пользователи': CHART_COLORS.slate,
-  'прочее': CHART_COLORS.muted,
+  campaigns: CHART_COLORS.accent,
+  forecasts: CHART_COLORS.ok,
+  data: CHART_COLORS.info,
+  models: CHART_COLORS.violet,
+  users: CHART_COLORS.slate,
+  other: CHART_COLORS.muted,
+}
+
+const CLIENT_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+
+interface ActivityRange {
+  from: string | null
+  to: string | null
+  label: string
+}
+
+function two(value: number): string {
+  return String(value).padStart(2, '0')
+}
+
+function activityPeriodLabel(unit: Exclude<ActivityScope, 'all'>, period: ActivityPeriod): string {
+  const from = new Date(period.from)
+  const to = new Date(period.to)
+  const day = `${two(from.getDate())}.${two(from.getMonth() + 1)}`
+  switch (unit) {
+    case 'hour':
+      return `${day}, ${two(from.getHours())}:00–${two(to.getHours())}:00`
+    case 'day':
+      return `${day}.${from.getFullYear()}`
+    case 'week': {
+      const last = new Date(to.getTime() - 1)
+      return `${day}–${two(last.getDate())}.${two(last.getMonth() + 1)}.${last.getFullYear()}`
+    }
+    default:
+      return `${MONTHS[from.getMonth()].toLowerCase()} ${from.getFullYear()}`
+  }
 }
 
 function SummaryTab({ goAudit, onOpenCampaign }: { goAudit: () => void; onOpenCampaign: (id: number) => void }) {
   const [summary, setSummary] = useState<AdminSummary | null>(null)
   const [entries, setEntries] = useState<AuditEntry[]>([])
   const [error, setError] = useState('')
+
+  const [scope, setScope] = useState<ActivityScope>('all')
+  const [periods, setPeriods] = useState<ActivityPeriod[]>([])
+  const [selectedPeriod, setSelectedPeriod] = useState('')
+  const [periodsLoading, setPeriodsLoading] = useState(false)
+  const [range, setRange] = useState<ActivityRange>({ from: null, to: null, label: 'за всё время' })
+  const [activity, setActivity] = useState<AdminActivity | null>(null)
+  const [activityError, setActivityError] = useState('')
 
   useEffect(() => {
     Promise.all([api.adminSummary(), api.audit(0, 100)])
@@ -147,22 +172,108 @@ function SummaryTab({ goAudit, onOpenCampaign }: { goAudit: () => void; onOpenCa
       .catch((cause) => setError(cause instanceof ApiError ? cause.message : 'не удалось загрузить сводку'))
   }, [])
 
+  useEffect(() => {
+    if (scope === 'all') {
+      return
+    }
+    let active = true
+    setPeriodsLoading(true)
+    setActivityError('')
+    api.adminActivityPeriods(scope, CLIENT_TIME_ZONE)
+      .then((data) => {
+        if (!active) {
+          return
+        }
+        setPeriods(data.periods)
+        if (data.periods.length === 0) {
+          setSelectedPeriod('')
+          setRange({ from: null, to: null, label: ACTIVITY_SCOPE_LABELS[scope] })
+          return
+        }
+        const first = data.periods[0]
+        setSelectedPeriod(first.from)
+        setRange({ from: first.from, to: first.to, label: activityPeriodLabel(scope, first) })
+      })
+      .catch((cause) => {
+        if (!active) {
+          return
+        }
+        setPeriods([])
+        setSelectedPeriod('')
+        setActivityError(cause instanceof ApiError ? cause.message : 'не удалось получить периоды')
+      })
+      .finally(() => {
+        if (active) {
+          setPeriodsLoading(false)
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [scope])
+
+  useEffect(() => {
+    if (scope !== 'all' && (periodsLoading || !selectedPeriod)) {
+      return
+    }
+    let active = true
+    api.adminActivity(range.from, range.to)
+      .then((data) => {
+        if (active) {
+          setActivity(data)
+          setActivityError('')
+        }
+      })
+      .catch((cause) => {
+        if (active) {
+          setActivityError(cause instanceof ApiError ? cause.message : 'не удалось посчитать активность')
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [range, scope, periodsLoading, selectedPeriod])
+
   const summaryTable = useSortTable(entries, AUDIT_COLUMNS)
 
-  const activity = useMemo(() => {
-    const counts: Record<string, number> = {}
-    for (const entry of entries) {
-      const category = auditCategory(entry.action)
-      counts[category] = (counts[category] ?? 0) + 1
+  const chooseScope = (next: ActivityScope) => {
+    setScope(next)
+    setSelectedPeriod('')
+    setPeriods([])
+    setActivity(null)
+    setActivityError('')
+    setPeriodsLoading(next !== 'all')
+    if (next === 'all') {
+      setRange({ from: null, to: null, label: 'за всё время' })
     }
-    return Object.entries(counts)
-      .sort((first, second) => second[1] - first[1])
-      .map(([category, value]) => ({
-        label: CATEGORY_LABELS[category] ?? category,
-        value,
-        color: CATEGORY_COLORS[category] ?? CHART_COLORS.muted,
+  }
+
+  const choosePeriod = (from: string) => {
+    if (scope === 'all') {
+      return
+    }
+    const period = periods.find((item) => item.from === from)
+    if (!period) {
+      return
+    }
+    setSelectedPeriod(from)
+    setActivity(null)
+    setActivityError('')
+    setRange({ from: period.from, to: period.to, label: activityPeriodLabel(scope, period) })
+  }
+
+  const periodOptions = scope === 'all'
+    ? []
+    : periods.map((period) => ({
+        value: period.from,
+        label: activityPeriodLabel(scope, period),
       }))
-  }, [entries])
+
+  const segments = (activity?.groups ?? []).map((group) => ({
+    label: group.label,
+    value: group.count,
+    color: CATEGORY_COLORS[group.category] ?? CHART_COLORS.muted,
+  }))
 
   if (!summary) {
     return error ? <ErrorBox message={error} /> : <PageLoader />
@@ -204,19 +315,50 @@ function SummaryTab({ goAudit, onOpenCampaign }: { goAudit: () => void; onOpenCa
           <div className="card-head">
             <div>
               <h2>Активность пользователей</h2>
-              <div className="csub">распределение последних {entries.length} действий по типам</div>
+              <div className="csub">
+                {activityError
+                  ? 'активность недоступна'
+                  : activity
+                    ? `${fmtNum(activity.total)} ${plural(activity.total, ['действие', 'действия', 'действий'])} ${range.label}`
+                    : scope !== 'all' && !periodsLoading && periods.length === 0
+                      ? 'действий за выбранный период нет'
+                      : 'считаем…'}
+              </div>
+            </div>
+            <div className="activity-filters">
+              <Select
+                variant="pill"
+                value={scope}
+                options={ACTIVITY_SCOPES}
+                onChange={(next) => chooseScope(next as ActivityScope)}
+              />
+              {scope !== 'all' && (
+                <div className="activity-period">
+                  <Select
+                    variant="pill"
+                    value={selectedPeriod}
+                    options={periodOptions}
+                    placeholder={periodsLoading ? 'загружаем…' : 'нет периодов'}
+                    disabled={periodsLoading || periods.length === 0}
+                    onChange={choosePeriod}
+                  />
+                </div>
+              )}
             </div>
           </div>
-          {entries.length === 0
-            ? <EmptyState>действий пока нет</EmptyState>
-            : (
-              <Donut
-                size={170}
-                centerValue={String(entries.length)}
-                centerLabel="действий"
-                segments={activity}
-              />
-              )}
+          {activityError && <div className="form-error activity-error">{activityError}</div>}
+          {!activityError && scope !== 'all' && !periodsLoading && periods.length === 0
+            ? <EmptyState>за выбранный период действий нет</EmptyState>
+            : activity && activity.total === 0
+              ? <EmptyState>за выбранный период действий нет</EmptyState>
+              : activity && (
+                <Donut
+                  size={170}
+                  centerValue={fmtNum(activity.total)}
+                  centerLabel="действий"
+                  segments={segments}
+                />
+                )}
         </div>
         <div className="card">
           <div className="card-head">
@@ -552,7 +694,6 @@ const AUDIT_FILTERS: { id: string; label: string }[] = [
   { id: 'users', label: 'Пользователи' },
   { id: 'data', label: 'Данные' },
   { id: 'models', label: 'Модели' },
-  { id: 'backups', label: 'Бэкапы' },
 ]
 
 const TRAINING_PAGE_SIZE = 20
@@ -563,6 +704,15 @@ const TRAINING_COLUMNS: SortColumn<TrainingPreviewRow>[] = [
   { id: 'days', title: 'Дней данных', value: (row) => row.days },
   { id: 'ratio', title: 'ROI (факт)', value: (row) => Number(row.ratio.replace(',', '.')) },
 ]
+
+/** Каждая кампания даёт запись обучающей выборки на каждой отсечке (0/30/55/80 % длительности). */
+function cutoffRecordsCount(days: number): number {
+  const cutoffs = new Set<number>()
+  for (const fraction of [0, 0.3, 0.55, 0.8]) {
+    cutoffs.add(Math.round(days * fraction))
+  }
+  return cutoffs.size
+}
 
 const AUDIT_COLUMNS: SortColumn<AuditEntry>[] = [
   { id: 'time', title: 'Время', value: (row) => row.actionTime },
@@ -833,6 +983,7 @@ function ModelsTab({ onOpenCampaign }: { onOpenCampaign: (id: number) => void })
   const [error, setError] = useState('')
   const [trainOpen, setTrainOpen] = useState(false)
   const [busyId, setBusyId] = useState<number | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<AdminModel | null>(null)
 
   const load = useCallback(() => {
     api.adminModels()
@@ -853,6 +1004,24 @@ function ModelsTab({ onOpenCampaign }: { onOpenCampaign: (id: number) => void })
       load()
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : 'не удалось активировать версию')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const remove = async () => {
+    const model = confirmDelete
+    if (!model || busyId) {
+      return
+    }
+    setBusyId(model.modelId)
+    setError('')
+    try {
+      await api.deleteModel(model.modelId)
+      setConfirmDelete(null)
+      load()
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : 'не удалось удалить версию')
     } finally {
       setBusyId(null)
     }
@@ -899,14 +1068,6 @@ function ModelsTab({ onOpenCampaign }: { onOpenCampaign: (id: number) => void })
               </table>
               )
             : <EmptyState>активной версии нет</EmptyState>}
-          <div className="note-card">
-            💡
-            <span>
-              Модели организаций ({fmtNum(data.organizationsWithOwnModel)} из {fmtNum(data.organizationsTotal)})
-              обучаются и обновляются автоматически при появлении новых завершённых кампаний —
-              вмешательство администратора не требуется.
-            </span>
-          </div>
           <button className="cta" style={{ width: '100%', marginTop: 16 }} onClick={() => setTrainOpen(true)}>
             ⟳ Обучить общую модель
           </button>
@@ -944,9 +1105,14 @@ function ModelsTab({ onOpenCampaign }: { onOpenCampaign: (id: number) => void })
                       <td>
                         <div className="row-actions">
                           {!model.isActive && (
-                            <button disabled={!model.available || busyId === model.modelId} onClick={() => activate(model)}>
-                              Откатить
-                            </button>
+                            <>
+                              <button disabled={!model.available || busyId === model.modelId} onClick={() => activate(model)}>
+                                Откатить
+                              </button>
+                              <button className="danger" disabled={busyId === model.modelId} onClick={() => setConfirmDelete(model)}>
+                                Удалить
+                              </button>
+                            </>
                           )}
                         </div>
                       </td>
@@ -955,10 +1121,6 @@ function ModelsTab({ onOpenCampaign }: { onOpenCampaign: (id: number) => void })
                 </tbody>
               </table>
               )}
-          <div className="note-card">
-            ⚠️
-            <span>Откат версии — опасная операция: все новые прогнозы сразу начнут считаться старой моделью.</span>
-          </div>
         </div>
       </div>
 
@@ -968,6 +1130,29 @@ function ModelsTab({ onOpenCampaign }: { onOpenCampaign: (id: number) => void })
         onTrained={load}
         onOpenCampaign={onOpenCampaign}
       />
+
+      <Modal
+        open={confirmDelete !== null}
+        onClose={() => setConfirmDelete(null)}
+        title="Удалить версию модели"
+        subtitle={confirmDelete ? `Версия ${confirmDelete.version} · удаляется из реестра и сервиса прогнозирования` : undefined}
+      >
+        {confirmDelete && (
+          <>
+            <div className="warn-box">
+              Вы уверены?
+              Файлы этой версии и запись в реестре будут удалены <b>безвозвратно</b>. Вернуться к ней после удаления нельзя —
+              останется только текущая активная версия.
+            </div>
+            <div className="modal-foot-right" style={{ marginTop: 22 }}>
+              <button className="ghost-btn" disabled={busyId !== null} onClick={() => setConfirmDelete(null)}>Отмена</button>
+              <button className="danger-btn f" disabled={busyId !== null} onClick={remove}>
+                {busyId === confirmDelete.modelId ? 'Удаляю…' : 'Удалить'}
+              </button>
+            </div>
+          </>
+        )}
+      </Modal>
     </>
   )
 }
@@ -1019,6 +1204,41 @@ function TrainingModal({ open, onClose, onTrained, onOpenCampaign }: {
   const includedRows = table.rows.slice((currentPage - 1) * TRAINING_PAGE_SIZE, currentPage * TRAINING_PAGE_SIZE)
 
   const excludedRows = preview?.excluded ?? []
+
+  /** Состав выборки с учётом правок: кампании, записи, платформы и период пересчитываются динамически. */
+  const derived = useMemo(() => {
+    const included = preview?.included ?? []
+    const excluded = preview?.excluded ?? []
+    const effective = [] as TrainingPreviewRow[]
+    for (const row of included) {
+      if (!changes.has(row.id)) effective.push(row)
+    }
+    for (const row of excluded) {
+      if (changes.has(row.id)) {
+        effective.push({ ...row, budget: '', ratio: '' })
+      }
+    }
+    let records = 0
+    const byPlatform = new Map<string, number>()
+    let periodStart: string | null = null
+    let periodEnd: string | null = null
+    for (const row of effective) {
+      records += cutoffRecordsCount(Math.max(row.days, 0))
+      byPlatform.set(row.platform, (byPlatform.get(row.platform) ?? 0) + 1)
+      if (row.periodStart && (!periodStart || row.periodStart < periodStart)) periodStart = row.periodStart
+      if (row.periodEnd && (!periodEnd || row.periodEnd > periodEnd)) periodEnd = row.periodEnd
+    }
+    return {
+      campaigns: effective.length,
+      records,
+      excludedCount: included.length + excluded.length - effective.length,
+      platforms: [...byPlatform.entries()]
+        .map(([platform, campaigns]) => ({ platform, campaigns }))
+        .sort((a, b) => a.platform.localeCompare(b.platform, 'ru')),
+      periodStart: periodStart ?? preview?.periodStart ?? null,
+      periodEnd: periodEnd ?? preview?.periodEnd ?? null,
+    }
+  }, [preview, changes])
 
   const toggle = (id: number, current: FlagChange) => {
     const next = new Map(changes)
@@ -1084,32 +1304,31 @@ function TrainingModal({ open, onClose, onTrained, onOpenCampaign }: {
       subtitle="шаг 2 из 2 — кто попадёт в новую версию модели; кампанию можно исключить галочкой, а её название открыть карточку в новой вкладке"
       wide
     >
-      {!preview && !error && <PageLoader />}
-      {error && <div style={{ marginBottom: 12 }}><ErrorBox message={error} /></div>}
+      {!preview && (error ? <ErrorBox message={error} /> : <PageLoader />)}
       {preview && (
         <>
           <div className="summary">
             <div className="sum-item">
               <div className="k">В выборке</div>
-              <div className="v">{fmtNum(preview.campaignCount)}</div>
+              <div className="v">{fmtNum(derived.campaigns)}</div>
             </div>
             <div className="sum-item">
               <div className="k">Записей датасета</div>
-              <div className="v">{fmtNum(preview.recordCount)}</div>
+              <div className="v">{fmtNum(derived.records)}</div>
             </div>
             <div className="sum-item">
               <div className="k">Исключено</div>
-              <div className="v">{fmtNum(preview.excluded.length + changes.size)} <span>с учётом ваших правок</span></div>
+              <div className="v">{fmtNum(derived.excludedCount)}</div>
             </div>
             <div className="sum-item">
               <div className="k">Период данных</div>
-              <div className="v" style={{ fontSize: 15 }}>{fmtDate(preview.periodStart)} – {fmtDate(preview.periodEnd)}</div>
+              <div className="v" style={{ fontSize: 15 }}>{fmtDate(derived.periodStart)} – {fmtDate(derived.periodEnd)}</div>
             </div>
           </div>
 
           <div className="toolbar">
             <div className="fchips">
-              {preview.byPlatform.map((row) => (
+              {derived.platforms.map((row) => (
                 <span className="detect-chip" key={row.platform}>
                   {row.platform} · <b>{fmtNum(row.campaigns)} кампаний</b>
                 </span>
@@ -1150,7 +1369,7 @@ function TrainingModal({ open, onClose, onTrained, onOpenCampaign }: {
                     <td>{row.platform}</td>
                     <td className="mono">{fmtNum(row.days)}</td>
                     <td className="mono">{row.ratio}</td>
-                    <td>{pending ? <StatusPill tone="bad" label="исключите из обучения" /> : <StatusPill tone="ok" label="ок" />}</td>
+                    <td>{pending ? <StatusPill tone="bad" label="исключена из обучения" /> : <StatusPill tone="ok" label="ок" />}</td>
                   </tr>
                 )
               })}
@@ -1169,11 +1388,11 @@ function TrainingModal({ open, onClose, onTrained, onOpenCampaign }: {
                     </td>
                     <td><CampaignLink id={row.id} name={row.name} onOpen={onOpenCampaign} /></td>
                     <td>{row.platform}</td>
-                    <td className="mono">—</td>
+                    <td className="mono">{fmtNum(row.days)}</td>
                     <td className="mono">—</td>
                     <td>
                       {pending
-                        ? <StatusPill tone="ok" label="вернёте в обучение" />
+                        ? <StatusPill tone="ok" label="возвращена в обучение" />
                         : <StatusPill tone="bad" label={row.isTest ? 'тестовая кампания' : 'исключена из обучения'} />}
                     </td>
                   </tr>
@@ -1221,6 +1440,8 @@ function TrainingModal({ open, onClose, onTrained, onOpenCampaign }: {
             </div>
           )}
 
+          {error && <div style={{ marginTop: 14 }}><ErrorBox message={error} /></div>}
+
           <div className="table-foot" style={{ marginTop: 16 }}>
             <span>
               {changes.size > 0
@@ -1254,86 +1475,3 @@ function TrainingModal({ open, onClose, onTrained, onOpenCampaign }: {
   )
 }
 
-/* ===================== РЕЗЕРВНЫЕ КОПИИ ===================== */
-
-function BackupsTab() {
-  const [backups, setBackups] = useState<BackupEntry[] | null>(null)
-  const [error, setError] = useState('')
-  const [downloadError, setDownloadError] = useState('')
-
-  useEffect(() => {
-    api.backups()
-      .then(setBackups)
-      .catch((cause) => setError(cause instanceof ApiError ? cause.message : 'не удалось загрузить список копий'))
-  }, [])
-
-  const download = async (name: string) => {
-    setDownloadError('')
-    try {
-      await downloadFile(`/api/admin/backups/${encodeURIComponent(name)}/download`, name)
-    } catch (cause) {
-      setDownloadError(cause instanceof ApiError ? cause.message : 'не удалось скачать копию')
-    }
-  }
-
-  if (!backups) {
-    return error ? <ErrorBox message={error} /> : <PageLoader />
-  }
-
-  const latest = backups[0]
-
-  return (
-    <div className="grid" style={{ gridTemplateColumns: '1fr 1.5fr', alignItems: 'start' }}>
-      <div className="card">
-        <div className="card-head"><h2>Расписание</h2></div>
-        <table style={{ fontSize: 13.5 }}>
-          <tbody>
-            <tr><td style={{ color: 'var(--muted)' }}>Способ</td><td><b>pg_dump, вручную или по расписанию</b></td></tr>
-            <tr><td style={{ color: 'var(--muted)' }}>Хранилище</td><td><b>db/backup на сервере</b></td></tr>
-            <tr><td style={{ color: 'var(--muted)' }}>Последняя</td><td><b>{latest ? `${fmtDateTime(latest.lastModified)} · ${fmtDecimal(latest.size / 1024 / 1024)} МБ` : '—'}</b></td></tr>
-          </tbody>
-        </table>
-        <div className="note-card">
-          💡
-          <span>
-            Создание копии выполняется на сервере скриптом <b>db/backup/backup.sh</b> — из соображений безопасности
-            приложение не запускает pg_dump само. Восстановление — через psql из файла копии.
-          </span>
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="card-head">
-          <div>
-            <h2>История копий</h2>
-            <div className="csub">скачивание фиксируется в журнале действий</div>
-          </div>
-        </div>
-        {downloadError && <div className="form-error" style={{ marginBottom: 12 }}>{downloadError}</div>}
-        {backups.length === 0
-          ? <EmptyState>копий пока нет — создайте первую скриптом backup.sh</EmptyState>
-          : (
-            <table>
-              <thead>
-                <tr><th>Файл</th><th>Дата и время</th><th>Размер</th><th></th></tr>
-              </thead>
-              <tbody>
-                {backups.map((backup) => (
-                  <tr key={backup.name}>
-                    <td className="mono">{backup.name}</td>
-                    <td className="mono">{fmtDateTime(backup.lastModified)}</td>
-                    <td className="mono">{fmtDecimal(backup.size / 1024 / 1024)} МБ</td>
-                    <td>
-                      <div className="row-actions">
-                        <button onClick={() => download(backup.name)}>Скачать</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            )}
-      </div>
-    </div>
-  )
-}

@@ -18,6 +18,8 @@ public interface MlModelRepository extends JpaRepository<MlModel, Long> {
 
     List<MlModel> findByOrganizationIdIsNull();
 
+    long countByOrganizationIdIsNull();
+
     List<MlModel> findByOrganizationId(Long organizationId);
 
     List<MlModel> findByOrganizationIdIsNotNull();

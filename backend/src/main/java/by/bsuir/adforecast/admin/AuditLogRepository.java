@@ -38,15 +38,16 @@ public class AuditLogRepository {
                                                 or a.action like '%пользовател%'))
                    or (:category = 'data' and (a.action like 'загрузка%' or a.action like '%кампани%'
                                                or a.action like '%прогноз%' or a.action like '%отчёт%'))
-                   or (:category = 'models' and (a.action like '%обучени%' or a.action like '%модел%'))
-                   or (:category = 'backups' and a.action like '%копи%'))
+                   or (:category = 'models' and (a.action like '%обучени%' or a.action like '%модел%')))
               and (lower(coalesce(u.login, '')) like :pattern escape '\\'
                    or lower(coalesce(u.full_name, '')) like :pattern escape '\\'
                    or lower(a.action) like :pattern escape '\\'
                    or lower(coalesce(a.object_type, '')) like :pattern escape '\\'
                    or lower(coalesce(a.details, '')) like :pattern escape '\\'
                    or lower(coalesce(a.ip, '')) like :pattern escape '\\'
-                   or to_char(a.action_time, 'DD.MM.YYYY HH24:MI') like :pattern escape '\\')
+                   -- время хранится в UTC, а показывается в поясе пользователя — искать в том же поясе
+                   or to_char(a.action_time at time zone 'UTC' at time zone cast(:zone as text),
+                              'DD.MM.YYYY HH24:MI') like :pattern escape '\\')
             """;
 
     private final EntityManager entityManager;
@@ -55,7 +56,8 @@ public class AuditLogRepository {
         this.entityManager = entityManager;
     }
 
-    public Page<AuditEntryResponse> search(String category, String pattern, String sort, String direction, int page, int size) {
+    public Page<AuditEntryResponse> search(String category, String pattern, String sort, String direction,
+                                           String zone, int page, int size) {
         String column = SORT_COLUMNS.getOrDefault(sort, "a.action_time");
         String order = "asc".equalsIgnoreCase(direction) ? "asc" : "desc";
 
@@ -63,6 +65,7 @@ public class AuditLogRepository {
                 SELECT + WHERE + " order by " + column + " " + order + ", a.log_id desc limit :limit offset :offset");
         query.setParameter("category", category);
         query.setParameter("pattern", pattern);
+        query.setParameter("zone", zone);
         query.setParameter("limit", size);
         query.setParameter("offset", (long) page * size);
 
@@ -74,6 +77,7 @@ public class AuditLogRepository {
                 "select count(*) from audit_actions a left join users u on u.user_id = a.user_id " + WHERE);
         count.setParameter("category", category);
         count.setParameter("pattern", pattern);
+        count.setParameter("zone", zone);
         long total = ((Number) count.getSingleResult()).longValue();
 
         return new PageImpl<>(entries, PageRequest.of(page, size), total);

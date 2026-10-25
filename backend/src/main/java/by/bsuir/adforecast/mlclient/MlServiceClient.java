@@ -46,6 +46,20 @@ public class MlServiceClient {
         }
     }
 
+    public void deleteModel(String modelName, String version) {
+        try {
+            client.delete()
+                    .uri("/models/{name}/{version}", modelName, version)
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (ResourceAccessException exception) {
+            throw new MlServiceException("сервис прогнозирования недоступен", exception);
+        } catch (RestClientResponseException exception) {
+            log.error("ml-service DELETE вернул {}: {}", exception.getStatusCode(), exception.getResponseBodyAsString());
+            throw new MlServiceException("ошибка удаления модели: " + exception.getResponseBodyAsString(), exception);
+        }
+    }
+
     public TrainAcceptedResponse train(List<Map<String, Object>> records, Integer ensembleSize, Double holdoutFraction,
                                        String modelName, Map<String, Object> datasetSnapshot) {
         Map<String, Object> body = new HashMap<>();
