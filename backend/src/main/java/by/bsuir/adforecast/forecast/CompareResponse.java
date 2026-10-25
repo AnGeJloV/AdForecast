@@ -5,6 +5,7 @@ import java.math.BigDecimal;
 public record CompareResponse(
         String platform,
         BigDecimal budget,
+        String currency,
         Integer durationDays,
         Integer startMonth,
         String verdict,

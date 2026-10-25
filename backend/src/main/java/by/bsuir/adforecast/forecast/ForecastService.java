@@ -160,39 +160,47 @@ public class ForecastService {
             throw new IllegalArgumentException("кампания завершена, фактическая окупаемость уже известна");
         }
 
-        ObservedSnapshot snapshot = observedState(campaignId);
-        int duration = resolveDuration(request, snapshot);
-        int startMonth = resolveStartMonth(request, snapshot);
-        String scope = request.scopeOrDefault();
-        // модель считает в BYN: бюджет кампании приводится к базовой валюте по курсу НБРБ
-        BigDecimal budgetBase = CurrencyRates.toBase(campaign.getCurrency(), campaign.getBudget());
-
-        Prediction prediction = blendedPrediction(campaign, budgetBase, duration, startMonth, snapshot,
-                campaign.getOrganization().getId(), scope);
-
+        // Запись создается до обращения к ML: неудачная попытка тоже должна остаться
+        // в истории и журнале. Модель назначается после успешного расчета.
         Forecast forecast = new Forecast();
         forecast.setCampaign(campaign);
-        forecast.setModel(prediction.dominantModel());
         forecast.setStartedAt(LocalDateTime.now());
         forecast.setStatus(ForecastStatus.PENDING);
         forecast = forecastRepository.save(forecast);
 
+        ForecastParam param = null;
+        ForecastResult result = null;
+        Prediction prediction = null;
         try {
             forecast.setStatus(ForecastStatus.RUNNING);
             forecastRepository.save(forecast);
 
-            ForecastParam param = new ForecastParam();
+            ObservedSnapshot snapshot = observedState(campaignId);
+            int duration = resolveDuration(request, snapshot);
+            int startMonth = resolveStartMonth(request, snapshot);
+            String scope = request.scopeOrDefault();
+            // модель считает в BYN: бюджет кампании приводится к базовой валюте по курсу НБРБ
+            BigDecimal budgetBase = CurrencyRates.toBase(campaign.getCurrency(), campaign.getBudget());
+
+            prediction = blendedPrediction(campaign, budgetBase, duration, startMonth, snapshot,
+                    campaign.getOrganization().getId(), scope);
+            forecast.setModel(prediction.dominantModel());
+            forecastRepository.save(forecast);
+
+            param = new ForecastParam();
             param.setForecast(forecast);
             param.setDurationDays(duration);
             param.setStartMonth(startMonth);
             param.setHistDays(snapshot == null ? 0 : snapshot.days());
             param.setHistCost(snapshot == null ? null : BigDecimal.valueOf(snapshot.cost()).setScale(2, RoundingMode.HALF_UP));
             param.setHistRevenue(snapshot == null ? null : BigDecimal.valueOf(snapshot.revenue()).setScale(2, RoundingMode.HALF_UP));
+            param.setBudget(campaign.getBudget());
+            param.setCurrency(campaign.getCurrency());
             param.setConfidenceLevel(new BigDecimal("0.8"));
             param.setUseSeasonality(true);
             forecastParamRepository.save(param);
 
-            ForecastResult result = new ForecastResult();
+            result = new ForecastResult();
             result.setForecast(forecast);
             result.setVerdict(prediction.verdict());
             // Вердикт-предупреждение числовой оценки не содержит: пустые поля честнее фиктивных.
@@ -216,30 +224,32 @@ public class ForecastService {
 
             forecast.setStatus(ForecastStatus.COMPLETED);
             forecastRepository.save(forecast);
-
-            auditService.record(userId, "запуск прогноза", "кампания", campaignId,
-                    "«" + campaign.getCampaignName() + "»: вердикт «" + verdictLabel(prediction.verdict())
-                            + "», коэффициент " + toRatio(prediction.ratio()).toPlainString()
-                            + " (интервал " + String.format("%.2f", prediction.lower()) + "–"
-                            + String.format("%.2f", prediction.upper()) + ")"
-                            + ", длительность " + duration + " дн., область: " + scopeLabel(scope)
-                            + ", модели: своя " + (prediction.ownModel() == null
-                                    ? "не использовалась"
-                                    : prediction.ownModel().getModelVersion() + " (вес "
-                                            + String.format("%.2f", prediction.ownWeight()) + ")")
-                            + " + общая " + prediction.dominantModel().getModelVersion());
-            return toResponse(forecast, param, result, prediction);
-        } catch (MlServiceException exception) {
-            forecast.setStatus(ForecastStatus.FAILED);
-            forecastRepository.save(forecast);
-            auditService.record(userId, "прогноз не рассчитан", "кампания", campaignId,
-                    "«" + campaign.getCampaignName() + "»: " + exception.getMessage());
-            throw exception;
-        } catch (IllegalArgumentException exception) {
-            forecast.setStatus(ForecastStatus.FAILED);
-            forecastRepository.save(forecast);
+        } catch (RuntimeException exception) {
+            markFailed(userId, forecast, campaign, exception);
             throw exception;
         }
+
+        auditService.record(userId, "запуск прогноза", "кампания", campaignId,
+                "«" + campaign.getCampaignName() + "»: вердикт «" + verdictLabel(prediction.verdict())
+                        + "», коэффициент " + toRatio(prediction.ratio()).toPlainString()
+                        + " (интервал " + String.format("%.2f", prediction.lower()) + "–"
+                        + String.format("%.2f", prediction.upper()) + ")"
+                        + ", длительность " + param.getDurationDays() + " дн., область: "
+                        + scopeLabel(result.getModelScope())
+                        + ", модели: своя " + (prediction.ownModel() == null
+                                ? "не использовалась"
+                                : prediction.ownModel().getModelVersion() + " (вес "
+                                        + String.format("%.2f", prediction.ownWeight()) + ")")
+                        + " + общая " + prediction.dominantModel().getModelVersion());
+        return toResponse(forecast, param, result, prediction);
+    }
+
+    /** Фиксирует неудачную попытку, чтобы она была видна в истории и журнале действий. */
+    private void markFailed(long userId, Forecast forecast, Campaign campaign, RuntimeException exception) {
+        forecast.setStatus(ForecastStatus.FAILED);
+        forecastRepository.save(forecast);
+        auditService.record(userId, "прогноз не рассчитан", "кампания", campaign.getId(),
+                truncate("«" + campaign.getCampaignName() + "»: " + exception.getMessage()));
     }
 
     @Transactional(readOnly = true)
@@ -303,19 +313,27 @@ public class ForecastService {
         orgModelService.triggerIfStale(organizationId);
         List<CompareResponse> responses = new ArrayList<>();
         for (CompareRequest.CompareVariant variant : request.variants()) {
+            String currency = variant.currency() == null || variant.currency().isBlank()
+                    ? CurrencyRates.BASE : variant.currency();
+            if (!CurrencyRates.isSupported(currency)) {
+                throw new IllegalArgumentException("валюта «" + currency + "» не поддерживается — доступны "
+                        + String.join(", ", CurrencyRates.supported()));
+            }
+            BigDecimal budgetBase = CurrencyRates.toBase(currency, variant.budget());
             MlPredictCommand command = new MlPredictCommand(
                     variant.platform(),
-                    variant.budget().doubleValue(),
+                    budgetBase.doubleValue(),
                     variant.durationDays(),
                     variant.startMonth(),
                     null,
                     GENERAL_MODEL_NAME,
                     activeGeneral().map(MlModel::getModelVersion).orElse(null));
-            Prediction prediction = blend(command, organizationId, variant.budget().doubleValue(),
+            Prediction prediction = blend(command, organizationId, budgetBase.doubleValue(),
                     variant.durationDays(), null, "BLEND");
             responses.add(new CompareResponse(
                     variant.platform(),
                     variant.budget(),
+                    currency,
                     variant.durationDays(),
                     variant.startMonth(),
                     prediction.verdict(),
@@ -327,8 +345,10 @@ public class ForecastService {
                             ? null
                             : BigDecimal.valueOf(prediction.paybackDays() / DAYS_PER_MONTH).setScale(2, RoundingMode.HALF_UP),
                     prediction.paybackDays() != null && prediction.paybackDays() <= variant.durationDays(),
-                    prediction.budgetMin() == null ? null : BigDecimal.valueOf(prediction.budgetMin()),
-                    prediction.budgetMax() == null ? null : BigDecimal.valueOf(prediction.budgetMax()),
+                    prediction.budgetMin() == null
+                            ? null : CurrencyRates.fromBase(currency, prediction.budgetMin()),
+                    prediction.budgetMax() == null
+                            ? null : CurrencyRates.fromBase(currency, prediction.budgetMax()),
                     prediction.budgetAny(),
                     prediction.basis()
             ));
@@ -794,8 +814,10 @@ public class ForecastService {
                 param.getHistDays(),
                 param.getHistCost(),
                 param.getHistRevenue(),
+                param.getBudget(),
+                param.getCurrency(),
                 result.getOwnModel() == null ? null : result.getOwnModel().getModelVersion(),
-                forecast.getModel().getModelVersion(),
+                forecast.getModel() == null ? null : forecast.getModel().getModelVersion(),
                 result.getOwnWeight(),
                 prediction.ownCampaigns(),
                 prediction.basis(),
@@ -809,7 +831,8 @@ public class ForecastService {
                     forecast.getId(), forecast.getStatus().name(), forecast.getStartedAt(),
                     null, null, null, null, null, null, null, null, null, null, null, null,
                     false, null, null, null, null,
-                    null, null, null, null, null, null, forecast.getModel().getModelVersion(),
+                    null, null, null, null, null, null, null, null,
+                    forecast.getModel() == null ? null : forecast.getModel().getModelVersion(),
                     null, null, null, null);
         }
         return new ForecastResponse(
@@ -838,8 +861,10 @@ public class ForecastService {
                 param.getHistDays(),
                 param.getHistCost(),
                 param.getHistRevenue(),
+                param.getBudget(),
+                param.getCurrency(),
                 result.getOwnModel() == null ? null : result.getOwnModel().getModelVersion(),
-                forecast.getModel().getModelVersion(),
+                forecast.getModel() == null ? null : forecast.getModel().getModelVersion(),
                 result.getOwnWeight(),
                 null,
                 null,

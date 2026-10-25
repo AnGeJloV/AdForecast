@@ -50,4 +50,7 @@ public class User {
 
     @Column(name = "last_login")
     private LocalDateTime lastLogin;
+
+    @Column(name = "token_version", nullable = false)
+    private Integer tokenVersion = 0;
 }

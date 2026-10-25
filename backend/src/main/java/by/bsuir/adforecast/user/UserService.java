@@ -68,6 +68,7 @@ public class UserService {
                 .orElseThrow(() -> new EntityNotFoundException("создатель не найден"))
                 .getOrganization());
         user.setIsActive(true);
+        user.setTokenVersion(0);
         User saved = userRepository.save(user);
         auditService.record(actorId, "создание пользователя", "пользователь", saved.getId(),
                 "логин " + saved.getLogin() + ", роль " + role.getRoleName());
@@ -93,6 +94,7 @@ public class UserService {
         user.setOrganization(organizationService.createWithStandardAccounts(
                 "Организация «" + request.fullName().trim() + "»"));
         user.setIsActive(true);
+        user.setTokenVersion(0);
         User saved = userRepository.save(user);
         auditService.record(saved.getId(), "регистрация", "пользователь", saved.getId(),
                 "логин " + saved.getLogin() + ", организация «" + saved.getOrganization().getName() + "»");
@@ -104,6 +106,8 @@ public class UserService {
                 .orElseThrow(() -> new EntityNotFoundException("пользователь не найден"));
         Role role = roleRepository.findById(request.roleId())
                 .orElseThrow(() -> new EntityNotFoundException("роль не найдена"));
+        long previousRoleId = user.getRole().getId();
+        boolean wasActive = Boolean.TRUE.equals(user.getIsActive());
         boolean self = targetId == actorId;
         if (self && (!request.isActive() || role.getId() != user.getRole().getId())) {
             throw new IllegalArgumentException("нельзя изменить собственную роль или заблокировать себя");
@@ -115,10 +119,25 @@ public class UserService {
         user.setFullName(request.fullName());
         user.setRole(role);
         user.setIsActive(request.isActive());
+        if (previousRoleId != role.getId() || wasActive != request.isActive()) {
+            user.setTokenVersion(tokenVersion(user) + 1);
+        }
         User saved = userRepository.save(user);
         auditService.record(actorId, "изменение пользователя", "пользователь", saved.getId(),
                 "роль " + role.getRoleName() + (request.isActive() ? "" : ", блокировка"));
         return toResponse(saved);
+    }
+
+    @Transactional
+    public void revokeTokens(long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new EntityNotFoundException("пользователь не найден"));
+        user.setTokenVersion(tokenVersion(user) + 1);
+        userRepository.save(user);
+    }
+
+    private static int tokenVersion(User user) {
+        return user.getTokenVersion() == null ? 0 : user.getTokenVersion();
     }
 
     private static UserResponse toResponse(User user) {

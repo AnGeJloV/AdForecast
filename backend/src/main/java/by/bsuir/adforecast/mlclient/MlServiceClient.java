@@ -22,9 +22,12 @@ public class MlServiceClient {
     private final RestClient client;
 
     public MlServiceClient(@Value("${ml-service.base-url}") String baseUrl) {
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(5_000);
+        requestFactory.setReadTimeout(75_000);
         this.client = RestClient.builder()
                 .baseUrl(baseUrl)
-                .requestFactory(new SimpleClientHttpRequestFactory())
+                .requestFactory(requestFactory)
                 .build();
     }
 

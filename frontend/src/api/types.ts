@@ -118,6 +118,8 @@ export interface ForecastHistoryItem {
   historyDays: number | null
   historyCost: number | null
   historyRevenue: number | null
+  budget: number | null
+  currency: string | null
   ownModelVersion: string | null
   generalModelVersion: string | null
   ownWeight: number | null
@@ -170,6 +172,8 @@ export interface DashboardData {
   campaignsPlanned: number
   campaignsActive: number
   campaignsFinished: number
+  /** Все денежные суммы сводки приведены к этой валюте. */
+  baseCurrency: string
   totalBudget: number
   totalCost: number
   totalRevenue: number
@@ -252,6 +256,7 @@ export interface ForecastListItem {
 
 export interface CompareVariant {
   platform: string
+  currency: string
   budget: number
   durationDays: number
   startMonth: number

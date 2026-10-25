@@ -29,6 +29,8 @@ public record ForecastResponse(
         Integer historyDays,
         BigDecimal historyCost,
         BigDecimal historyRevenue,
+        BigDecimal budget,
+        String currency,
         String ownModelVersion,
         String generalModelVersion,
         BigDecimal ownWeight,

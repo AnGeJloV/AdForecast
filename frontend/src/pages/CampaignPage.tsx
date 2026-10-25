@@ -246,8 +246,8 @@ function ForecastCard({ campaign, lastForecast, onCompleted }: {
       setError('длительность кампании — целое число от 1 до 365 дней')
       return
     }
-    if (hasHistory && durationValue <= campaign.daysCount) {
-      setError(`кампания уже длится ${campaign.daysCount} ${plural(campaign.daysCount, ['день', 'дня', 'дней'])} — укажите полную длительность больше`)
+    if (hasHistory && durationValue < campaign.daysCount) {
+      setError(`кампания уже длится ${campaign.daysCount} ${plural(campaign.daysCount, ['день', 'дня', 'дней'])} — полная длительность не может быть меньше`)
       return
     }
     setBusy(true)
@@ -280,16 +280,21 @@ function ForecastCard({ campaign, lastForecast, onCompleted }: {
 
   const tone = verdictTone(result?.verdict ?? null)
   const ratio = result?.paybackRatio ?? null
-  const currency = campaign.currency
-  const expectedReturn = result && ratio !== null ? campaign.budget * ratio : null
+  const currency = result?.currency ?? campaign.currency
+  const budget = result?.budget ?? campaign.budget
+  const expectedReturn = result && ratio !== null ? budget * ratio : null
   const intervalLower = result?.intervalLower ?? 0
   const intervalUpper = result?.intervalUpper ?? intervalLower
-  const returnFrom = campaign.budget * intervalLower
-  const returnTo = campaign.budget * intervalUpper
+  const returnFrom = budget * intervalLower
+  const returnTo = budget * intervalUpper
   const profit = result?.expectedProfit ?? null
   const isWarning = result !== null
     && (result.verdict === 'OUT_OF_RANGE' || result.verdict === 'BELOW_MINIMUM'
       || result.verdict === 'NO_CHANNEL_DATA')
+  const snapshotBudget = result?.budget ?? null
+  const snapshotCurrency = result?.currency ?? null
+  const snapshotChanged = (snapshotBudget !== null && Math.abs(snapshotBudget - campaign.budget) > 0.009)
+    || (snapshotCurrency !== null && snapshotCurrency !== campaign.currency)
 
   const scaleMax = Math.max(intervalUpper * 1.15, 1.25)
   const lowerPct = Math.min(100, (intervalLower / scaleMax) * 100)
@@ -309,7 +314,7 @@ function ForecastCard({ campaign, lastForecast, onCompleted }: {
           : null
     if (range !== null) {
       advice = result.verdict === 'UNPROFITABLE'
-        ? `Окно окупаемости по бюджету — ${range}: текущий бюджет ${fmtMoney(campaign.budget, currency)} вне него.`
+        ? `Окно окупаемости по бюджету — ${range}: бюджет расчёта ${fmtMoney(budget, currency)} вне него.`
         : `Окупаемость сохраняется при бюджете ${range}.`
     } else if (result.budgetAny) {
       advice = 'Окупается при любом разумном бюджете — канал и месяц работают уверенно.'
@@ -384,6 +389,12 @@ function ForecastCard({ campaign, lastForecast, onCompleted }: {
           нажмите «Рассчитать», чтобы пересчитать.
         </div>
       )}
+      {result && snapshotChanged && (
+        <div className="stale-hint">
+          Бюджет или валюта кампании изменились после расчёта. Показан снимок прежнего прогноза —
+          нажмите «Рассчитать», чтобы пересчитать на новых параметрах.
+        </div>
+      )}
 
       {result && tone && (
         <div className={`result ${tone}`}>
@@ -415,7 +426,7 @@ function ForecastCard({ campaign, lastForecast, onCompleted }: {
                 {' '}{verdictLabel(result.verdict)}
               </div>
               <div className="money-line">
-                Вложите {fmtMoney(campaign.budget, currency)} — вернётся ≈ {fmtMoney(expectedReturn, currency)}
+                Вложите {fmtMoney(budget, currency)} — вернётся ≈ {fmtMoney(expectedReturn, currency)}
                 <span className="range"> (от {fmtMoney(returnFrom)} до {fmtMoney(returnTo)})</span>.
                 {' '}{profit !== null && profit >= 0 ? 'Прибыль ≈ ' : 'Потери ≈ '}
                 <b>{fmtSigned(profit)} {currency}</b>
@@ -472,8 +483,8 @@ function ForecastCard({ campaign, lastForecast, onCompleted }: {
           <div className="foot">
             <span className="model">
               расчёт на {result.durationDays} {plural(Number(result.durationDays ?? 0), ['день', 'дня', 'дней'])}
-              {' · бюджет '}{fmtMoney(campaign.budget, currency)}
-              {result.durationDays ? ` (${fmtMoney(campaign.budget / result.durationDays, currency)} в день)` : ''}
+              {' · бюджет '}{fmtMoney(budget, currency)}
+              {result.durationDays ? ` (${fmtMoney(budget / result.durationDays, currency)} в день)` : ''}
               {' · область: '}{scopeLabel(result.modelScope)}
               {' · своя '}{result.ownModelVersion ?? '—'} · {fmtPercent(result.ownWeight)}
               {' · общая '}{result.generalModelVersion ?? '—'} · MAPE {result.mape === null ? '—' : `${fmtDecimal(result.mape)} %`}
@@ -640,15 +651,18 @@ function EditCampaignModal({ open, campaign, onClose, onSaved }: {
         </div>
         <div className="field">
           <label>Статус</label>
-          <Select
-            value={status}
-            options={[
-              { value: 'PLANNED', label: 'планируется' },
-              { value: 'ACTIVE', label: 'активна' },
-              { value: 'FINISHED', label: 'завершена' },
-            ]}
-            onChange={(next) => setStatus(next as CampaignStatus)}
-          />
+          {campaign.status === 'FINISHED'
+            ? <div className="csub">кампания завершена — статус не меняется</div>
+            : (
+              <Select
+                value={status}
+                options={[
+                  { value: 'PLANNED', label: 'планируется' },
+                  { value: 'ACTIVE', label: 'активна' },
+                ]}
+                onChange={(next) => setStatus(next as CampaignStatus)}
+              />
+              )}
         </div>
         <div className="foot">
           <button type="button" className="ghost-btn" onClick={onClose}>Отмена</button>

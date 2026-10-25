@@ -104,7 +104,7 @@ export function DashboardPage() {
       .catch((cause) => setError(cause instanceof ApiError ? cause.message : 'не удалось загрузить денежный поток'))
   }, [flowView.granularity, flowView.limit])
 
-  const currency = campaigns[0]?.currency ?? 'BYN'
+  const currency = data?.baseCurrency ?? 'BYN'
 
   const structure = useMemo(() => {
     const buckets = { ok: 0, mid: 0, bad: 0 }

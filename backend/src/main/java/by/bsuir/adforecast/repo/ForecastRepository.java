@@ -15,7 +15,7 @@ public interface ForecastRepository extends JpaRepository<Forecast, Long> {
     @Query("""
             select forecast
             from Forecast forecast
-            join fetch forecast.model
+            left join fetch forecast.model
             join fetch forecast.campaign
             where forecast.id = :id
             """)

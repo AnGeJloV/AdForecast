@@ -47,13 +47,17 @@ python csv_to_xlsx.py exports/sample_upload_1.csv exports/sample_upload_2.csv
 
 ## Датасет для обучения
 
-`export_dataset.sh` выгружает из БД выборку обучающих записей (платформа, бюджет, длительность, месяц, коэффициент окупаемости) в `dataset.csv`:
+`generate.py` создает `cutoff_records.csv` в формате, который ожидает `app.train_local`
+(состояние кампании на отсечках 0/30/55/80 % и итоговая окупаемость):
 
 ```bash
-bash export_dataset.sh
-docker cp dataset.csv adforecast-ml-service-1:/tmp/dataset.csv
-MSYS_NO_PATHCONV=1 docker exec adforecast-ml-service-1 python -m app.train_local /tmp/dataset.csv
+python generate.py
+docker cp cutoff_records.csv adforecast-ml-service-1:/tmp/cutoff_records.csv
+MSYS_NO_PATHCONV=1 docker exec adforecast-ml-service-1 python -m app.train_local /tmp/cutoff_records.csv
 ```
+
+`export_dataset.sh` и `dataset.csv` относятся к старому формату из пяти признаков
+и для `train_local` не используются.
 
 ## seed_data.sql
 

@@ -19,6 +19,9 @@ public record CompareRequest(
             @NotBlank
             String platform,
 
+            /** Если не указана, используется базовая валюта модели. */
+            String currency,
+
             @NotNull
             BigDecimal budget,
 

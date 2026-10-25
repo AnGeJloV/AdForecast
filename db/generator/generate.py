@@ -354,6 +354,8 @@ def main() -> None:
 
     records = []
     for campaign in campaigns:
+        if campaign["status"] != "FINISHED":
+            continue
         records.extend(cutoff_records(campaign))
     write_cutoffs(outdir / "cutoff_records.csv", records)
 

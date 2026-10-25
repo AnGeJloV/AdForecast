@@ -5,6 +5,7 @@ import by.bsuir.adforecast.domain.AdAccount;
 import by.bsuir.adforecast.domain.Campaign;
 import by.bsuir.adforecast.domain.CampaignAccess;
 import by.bsuir.adforecast.domain.CampaignStatus;
+import by.bsuir.adforecast.domain.User;
 import by.bsuir.adforecast.forecast.CurrencyRates;
 import by.bsuir.adforecast.repo.AdAccountRepository;
 import by.bsuir.adforecast.repo.CampaignAccessRepository;
@@ -109,8 +110,13 @@ public class CampaignService {
     }
 
     public CampaignSummaryResponse create(long userId, CampaignCreateRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new EntityNotFoundException("пользователь не найден"));
         AdAccount account = adAccountRepository.findById(request.accountId())
                 .orElseThrow(() -> new EntityNotFoundException("рекламный кабинет не найден"));
+        if (!account.getOrganization().getId().equals(user.getOrganization().getId())) {
+            throw new AccessDeniedException("нет доступа к рекламному кабинету");
+        }
         requireSupportedCurrency(request.currency());
         Campaign campaign = new Campaign();
         campaign.setAccount(account);
@@ -125,7 +131,7 @@ public class CampaignService {
         campaign = campaignRepository.save(campaign);
 
         CampaignAccess access = new CampaignAccess();
-        access.setUser(userRepository.getReferenceById(userId));
+        access.setUser(user);
         access.setCampaign(campaign);
         campaignAccessRepository.save(access);
 

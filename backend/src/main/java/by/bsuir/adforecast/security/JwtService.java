@@ -25,13 +25,14 @@ public class JwtService {
         this.ttl = ttl;
     }
 
-    public String issue(Long userId, String login, String role, List<String> permissions) {
+    public String issue(Long userId, String login, String role, List<String> permissions, int tokenVersion) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .subject(login)
                 .claim("uid", userId)
                 .claim("role", role)
                 .claim("perms", permissions)
+                .claim("ver", tokenVersion)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(ttl)))
                 .signWith(key)

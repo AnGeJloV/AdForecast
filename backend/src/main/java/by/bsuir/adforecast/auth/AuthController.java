@@ -63,6 +63,7 @@ public class AuthController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void logout(Authentication authentication) {
         AuthPrincipal principal = (AuthPrincipal) authentication.getPrincipal();
+        userService.revokeTokens(principal.userId());
         auditService.record(principal.userId(), "выход из системы", "пользователь", principal.userId(),
                 "логин " + principal.login());
     }
@@ -99,7 +100,9 @@ public class AuthController {
                 .toList();
         user.setLastLogin(LocalDateTime.now());
         userRepository.save(user);
-        String token = jwtService.issue(user.getId(), user.getLogin(), user.getRole().getRoleName(), permissions);
+        int tokenVersion = user.getTokenVersion() == null ? 0 : user.getTokenVersion();
+        String token = jwtService.issue(user.getId(), user.getLogin(), user.getRole().getRoleName(), permissions,
+                tokenVersion);
         return new LoginResponse(token, user.getLogin(), user.getFullName(), user.getRole().getRoleName(),
                 user.getOrganization().getName());
     }

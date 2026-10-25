@@ -44,6 +44,12 @@ public class ForecastParam {
     @Column(name = "hist_revenue")
     private BigDecimal histRevenue;
 
+    @Column(name = "budget")
+    private BigDecimal budget;
+
+    @Column(name = "currency")
+    private String currency;
+
     @Column(name = "confidence_level", nullable = false)
     private BigDecimal confidenceLevel;
 

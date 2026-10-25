@@ -46,7 +46,7 @@ export function LoginPage() {
           <br />
           <span>рекламных кампаний</span>
         </h1>
-        <p>AdForecast оценивает коэффициент окупаемости, вероятность возврата средств и срок окупаемости кампании до её запуска.</p>
+        <p>AdForecast оценивает коэффициент окупаемости, интервал прогноза и срок возврата средств до запуска кампании.</p>
         <form className="login-form" onSubmit={submit}>
           {error && <div className="form-error">{error}</div>}
           <input

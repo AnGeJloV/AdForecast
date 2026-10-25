@@ -8,6 +8,7 @@ public record DashboardResponse(
         long campaignsPlanned,
         long campaignsActive,
         long campaignsFinished,
+        String baseCurrency,
         BigDecimal totalBudget,
         BigDecimal totalCost,
         BigDecimal totalRevenue,

@@ -31,7 +31,7 @@ public class Forecast {
     @JoinColumn(name = "campaign_id")
     private Campaign campaign;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
     @JoinColumn(name = "model_id")
     private MlModel model;
 

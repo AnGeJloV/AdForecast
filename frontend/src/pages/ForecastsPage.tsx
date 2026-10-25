@@ -100,6 +100,7 @@ export function ForecastsPage() {
     }
     return {
       platform: campaign.platform,
+      currency: campaign.currency,
       budget,
       durationDays: duration,
       startMonth: Number(draft.startMonth),
@@ -235,18 +236,18 @@ export function ForecastsPage() {
                 const min = result.profitableBudgetMin
                 const max = result.profitableBudgetMax
                 const budgetHint = min !== null && max !== null
-                  ? `окупается при бюджете ${fmtMoney(min)}–${fmtMoney(max)}`
+                  ? `окупается при бюджете ${fmtMoney(min, result.currency)}–${fmtMoney(max, result.currency)}`
                   : min !== null
-                    ? `окупается при бюджете от ${fmtMoney(min)}`
+                    ? `окупается при бюджете от ${fmtMoney(min, result.currency)}`
                     : max !== null
-                      ? `окупается при бюджете до ${fmtMoney(max)}`
+                      ? `окупается при бюджете до ${fmtMoney(max, result.currency)}`
                       : result.profitableAtAnyBudget
                         ? 'окупается при любом разумном бюджете'
                         : 'окна окупаемости по бюджету нет'
                 return (
                   <div className={`variant${winner === index ? ' winner' : ''}`} key={index}>
                     <div className="name">
-                      {index === 0 ? 'А' : 'Б'} · {fmtMoney(result.budget)} / {fmtDays(result.durationDays)}
+                      {index === 0 ? 'А' : 'Б'} · {fmtMoney(result.budget, result.currency)} / {fmtDays(result.durationDays)}
                       {winner === index && <span className="crown">✓ выгоднее</span>}
                     </div>
                     <div className="roi">{fmtCoef(result.paybackRatio)}</div>
@@ -370,7 +371,7 @@ function CompareVerdict({ results, winner }: { results: CompareResult[]; winner:
   const otherMonths = other.paybackMonths
   return (
     <span>
-      Вариант <b>{winner === 0 ? 'А' : 'Б'}</b> выгоднее: на каждый вложенный рубль вернётся
+      Вариант <b>{winner === 0 ? 'А' : 'Б'}</b> выгоднее: на каждый вложенный {best.currency} вернётся
       {' '}на <b>{fmtDecimal(gain)}</b> больше ({fmtCoef(best.paybackRatio)} против {fmtCoef(other.paybackRatio)}).
       {bestMonths !== null && otherMonths !== null && bestMonths !== otherMonths && (
         <>

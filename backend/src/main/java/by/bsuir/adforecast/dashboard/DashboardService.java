@@ -1,6 +1,7 @@
 package by.bsuir.adforecast.dashboard;
 
 import by.bsuir.adforecast.campaign.CampaignSummaryProjection;
+import by.bsuir.adforecast.forecast.CurrencyRates;
 import by.bsuir.adforecast.repo.CampaignRepository;
 import by.bsuir.adforecast.repo.ForecastRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -9,6 +10,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -22,14 +27,15 @@ public class DashboardService {
     /** Гранулярность графика денежного потока: шаг корзины и её предел по умолчанию. */
     private static final String CASHFLOW_SQL = """
             select date_trunc(?, m.metric_date)::date as period_start,
+                   c.currency as currency,
                    sum(m.cost) as cost,
                    sum(m.revenue) as revenue
             from daily_metrics m
             join uploads u on u.upload_id = m.upload_id
+            join campaigns c on c.campaign_id = u.campaign_id
             where u.campaign_id in (select campaign_id from campaign_access where user_id = ?)
-            group by 1
+            group by 1, 2
             order by 1 desc
-            limit ?
             """;
 
     /** «Без ограничения»: предел корзин, который заведомо больше любой истории. */
@@ -85,13 +91,13 @@ public class DashboardService {
         long finished = total - planned - active;
 
         BigDecimal totalBudget = summaries.stream()
-                .map(CampaignSummaryProjection::getBudget)
+                .map(summary -> toBase(summary, summary.getBudget()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal totalCost = summaries.stream()
-                .map(CampaignSummaryProjection::getTotalCost)
+                .map(summary -> toBase(summary, summary.getTotalCost()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal totalRevenue = summaries.stream()
-                .map(CampaignSummaryProjection::getTotalRevenue)
+                .map(summary -> toBase(summary, summary.getTotalRevenue()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal actualRoi = totalCost.signum() == 0
                 ? null
@@ -142,7 +148,7 @@ public class DashboardService {
         }
 
         return new DashboardResponse(
-                total, planned, active, finished,
+                total, planned, active, finished, CurrencyRates.BASE,
                 totalBudget, totalCost, totalRevenue, actualRoi,
                 profitable, unprofitable,
                 forecastsTotal, forecastsCompleted,
@@ -159,10 +165,10 @@ public class DashboardService {
                 .map(entry -> {
                     List<CampaignSummaryProjection> rows = entry.getValue();
                     BigDecimal totalCost = rows.stream()
-                            .map(CampaignSummaryProjection::getTotalCost)
+                            .map(row -> toBase(row, row.getTotalCost()))
                             .reduce(BigDecimal.ZERO, BigDecimal::add);
                     BigDecimal totalRevenue = rows.stream()
-                            .map(CampaignSummaryProjection::getTotalRevenue)
+                            .map(row -> toBase(row, row.getTotalRevenue()))
                             .reduce(BigDecimal.ZERO, BigDecimal::add);
                     BigDecimal avgRoi = rows.stream()
                             .map(CampaignSummaryProjection::getActualRoi)
@@ -192,12 +198,45 @@ public class DashboardService {
             default -> "week";
         };
         int buckets = limit == null ? ALL_BUCKETS : Math.min(Math.max(limit, 1), 120);
-        List<CashflowPoint> points = jdbcTemplate.query(CASHFLOW_SQL, (rs, rowNum) -> new CashflowPoint(
-                rs.getDate("period_start").toLocalDate(),
-                rs.getBigDecimal("cost"),
-                rs.getBigDecimal("revenue")
-        ), unit, userId, buckets);
-        return points.reversed();
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(CASHFLOW_SQL, unit, userId);
+        Map<LocalDate, BigDecimal[]> byPeriod = new LinkedHashMap<>();
+        for (Map<String, Object> row : rows) {
+            Object rawPeriod = row.get("period_start");
+            LocalDate period;
+            if (rawPeriod instanceof java.sql.Date sqlDate) {
+                period = sqlDate.toLocalDate();
+            } else if (rawPeriod instanceof java.sql.Timestamp timestamp) {
+                period = timestamp.toLocalDateTime().toLocalDate();
+            } else if (rawPeriod instanceof LocalDate localDate) {
+                period = localDate;
+            } else {
+                period = null;
+            }
+            if (period == null) {
+                continue;
+            }
+            String currency = String.valueOf(row.get("currency"));
+            BigDecimal cost = (BigDecimal) row.get("cost");
+            BigDecimal revenue = (BigDecimal) row.get("revenue");
+            BigDecimal[] totals = byPeriod.computeIfAbsent(period,
+                    key -> new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO});
+            totals[0] = totals[0].add(CurrencyRates.toBase(currency, cost));
+            totals[1] = totals[1].add(CurrencyRates.toBase(currency, revenue));
+        }
+        List<CashflowPoint> points = new ArrayList<>();
+        for (Map.Entry<LocalDate, BigDecimal[]> entry : byPeriod.entrySet()) {
+            if (points.size() >= buckets) {
+                break;
+            }
+            points.add(new CashflowPoint(entry.getKey(), entry.getValue()[0], entry.getValue()[1]));
+        }
+        Collections.reverse(points);
+        return points;
+    }
+
+    /** Денежные суммы сводки приводятся к базовой валюте модели. */
+    private static BigDecimal toBase(CampaignSummaryProjection summary, BigDecimal amount) {
+        return amount == null ? BigDecimal.ZERO : CurrencyRates.toBase(summary.getCurrency(), amount);
     }
 
     private List<DashboardResponse.PlanFactRow> planVsFact(long userId) {

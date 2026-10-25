@@ -101,9 +101,12 @@ public class ExportService {
         ForecastResult result = forecastResultRepository.findByForecastId(forecastId)
                 .orElseThrow(() -> new EntityNotFoundException("результат прогноза не найден"));
 
-        String paybackMonths = result.getPaybackMonths() == null
-                ? "не окупается в течение кампании"
-                : result.getPaybackMonths().toPlainString();
+        boolean numeric = numericVerdict(result.getVerdict());
+        String paybackMonths = !numeric
+                ? "не рассчитывался"
+                : result.getPaybackMonths() == null
+                        ? "не окупается в течение кампании"
+                        : result.getPaybackMonths().toPlainString();
         String verdict = switch (result.getVerdict() == null ? "" : result.getVerdict()) {
             case "PROFITABLE" -> "вкладываться";
             case "BORDERLINE" -> "на грани окупаемости";
@@ -114,7 +117,11 @@ public class ExportService {
             default -> "—";
         };
         String budgetRange;
-        if (result.getBudgetMin() == null && result.getBudgetMax() == null) {
+        if (!numeric) {
+            budgetRange = "не рассчитывался";
+        } else if (Boolean.TRUE.equals(result.getBudgetAny())) {
+            budgetRange = "окупается при любом разумном бюджете в пределах данных модели";
+        } else if (result.getBudgetMin() == null && result.getBudgetMax() == null) {
             budgetRange = "не рассчитан";
         } else {
             budgetRange = (result.getBudgetMin() == null ? "от минимального" : result.getBudgetMin().toPlainString())
@@ -123,9 +130,15 @@ public class ExportService {
         }
         String history = param.getHistDays() == 0
                 ? "нет (кампания планируемая)"
-                : param.getHistDays() + " дней, расход " + param.getHistCost().toPlainString()
-                        + ", доход " + param.getHistRevenue().toPlainString();
-        String modelInfo = "основная: " + forecast.getModel().getModelName() + " " + forecast.getModel().getModelVersion();
+                : param.getHistDays() + " дней, расход "
+                        + (param.getHistCost() == null ? "—" : param.getHistCost().toPlainString())
+                        + ", доход "
+                        + (param.getHistRevenue() == null ? "—" : param.getHistRevenue().toPlainString());
+        String modelInfo = forecast.getModel() == null
+                ? "не назначена"
+                : "основная: " + forecast.getModel().getModelName() + " " + forecast.getModel().getModelVersion();
+        String snapshotBudget = (param.getBudget() == null ? campaign.getBudget() : param.getBudget()).toPlainString()
+                + " " + (param.getCurrency() == null ? campaign.getCurrency() : param.getCurrency());
         if (result.getOwnModel() != null) {
             modelInfo += ", своя: " + result.getOwnModel().getModelVersion()
                     + " (вес " + result.getOwnWeight().toPlainString() + ")";
@@ -137,7 +150,7 @@ public class ExportService {
                 campaign.getId(),
                 campaign.getAccount().getAccountName(),
                 campaign.getAccount().getPlatform(),
-                campaign.getBudget().toPlainString() + " " + campaign.getCurrency(),
+                snapshotBudget,
                 campaign.getStatus().name(),
                 verdict,
                 result.getPaybackRatio() == null ? "" : result.getPaybackRatio().toPlainString(),
@@ -237,6 +250,13 @@ public class ExportService {
         try (InputStream input = new ClassPathResource(path).getInputStream()) {
             return PDType0Font.load(document, input);
         }
+    }
+
+    private static boolean numericVerdict(String verdict) {
+        return switch (verdict == null ? "" : verdict) {
+            case "PROFITABLE", "BORDERLINE", "UNPROFITABLE" -> true;
+            default -> false;
+        };
     }
 
     private void saveHistory(long forecastId, ExportFormat format) {

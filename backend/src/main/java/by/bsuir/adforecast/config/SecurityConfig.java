@@ -1,5 +1,6 @@
 package by.bsuir.adforecast.config;
 
+import by.bsuir.adforecast.repo.PermissionRepository;
 import by.bsuir.adforecast.repo.UserRepository;
 import by.bsuir.adforecast.security.AppUserDetailsService;
 import by.bsuir.adforecast.security.JwtAuthFilter;
@@ -44,7 +45,9 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http, JwtService jwtService) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http, JwtService jwtService,
+                                          UserRepository userRepository,
+                                          PermissionRepository permissionRepository) throws Exception {
         return http
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -55,7 +58,8 @@ public class SecurityConfig {
                 .exceptionHandling(handler -> handler
                         .authenticationEntryPoint((request, response, exception) ->
                                 response.sendError(HttpStatus.UNAUTHORIZED.value())))
-                .addFilterBefore(new JwtAuthFilter(jwtService), UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(new JwtAuthFilter(jwtService, userRepository, permissionRepository),
+                        UsernamePasswordAuthenticationFilter.class)
                 .build();
     }
 }
