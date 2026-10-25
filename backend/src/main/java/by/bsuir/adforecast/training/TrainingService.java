@@ -34,8 +34,7 @@ import java.util.stream.Collectors;
 @Service
 public class TrainingService {
 
-    /** Минимум записей и кампаний для запуска обучения (низкий порог: модель даже на малой выборке
-     *  даёт грубую прикидку, а точность растёт по мере накопления данных). */
+    /** Низкий порог: модель даёт грубую прикидку даже на малой выборке. */
     static final int MIN_RECORDS = 20;
     static final int MIN_CAMPAIGNS = 5;
     static final String GENERAL_MODEL_NAME = "adforecast_roi";

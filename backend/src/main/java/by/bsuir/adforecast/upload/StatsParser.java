@@ -138,7 +138,6 @@ public class StatsParser {
         return FIELD_TITLES.get(FIELDS.indexOf(field));
     }
 
-    // ---------- чтение таблицы ----------
 
     private record Table(String delimiter, Charset charset, List<String> header, List<LabeledRow> rows) {
     }
@@ -330,7 +329,6 @@ public class StatsParser {
         return line.startsWith("\uFEFF") ? line.substring(1) : line;
     }
 
-    // ---------- определение колонок ----------
 
     private record Detection(Map<String, Integer> mapping, Map<String, String> methods, List<String> notes) {
 
@@ -534,7 +532,6 @@ public class StatsParser {
         return index == null ? "" : table.header().get(index);
     }
 
-    // ---------- профили колонок ----------
 
     private record ColumnProfile(int index, double dateLike, double intLike, double decimalLike,
                                  double mean, double zeroFraction) {
@@ -660,7 +657,6 @@ public class StatsParser {
                 .orElse(null);
     }
 
-    // ---------- форматы значений ----------
 
     private record DateStyle(DateTimeFormatter primary, String description) {
     }
@@ -765,7 +761,6 @@ public class StatsParser {
                 .replaceAll("[^0-9.,\\-]", "");
     }
 
-    // ---------- разбор строк ----------
 
     private ParsedRows parseRows(Table table, Map<String, Integer> mapping, DateStyle dateStyle) {
         List<MetricRow> rows = new ArrayList<>();

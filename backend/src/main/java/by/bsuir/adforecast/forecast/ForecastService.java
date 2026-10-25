@@ -160,8 +160,7 @@ public class ForecastService {
             throw new IllegalArgumentException("кампания завершена, фактическая окупаемость уже известна");
         }
 
-        // Запись создается до обращения к ML: неудачная попытка тоже должна остаться
-        // в истории и журнале. Модель назначается после успешного расчета.
+        // Неудачная попытка тоже остаётся в истории; модель назначается после успеха.
         Forecast forecast = new Forecast();
         forecast.setCampaign(campaign);
         forecast.setStartedAt(LocalDateTime.now());
@@ -203,16 +202,13 @@ public class ForecastService {
             result = new ForecastResult();
             result.setForecast(forecast);
             result.setVerdict(prediction.verdict());
-            // Вердикт-предупреждение числовой оценки не содержит: пустые поля честнее фиктивных.
-            // Иначе коэффициент 0 превращался в ROI −100 %, и это уходило в «план против факта»,
-            // отчёты и счётчик успешных прогнозов.
+            // Вердикты-предупреждения чисел не содержат — поля оставляем пустыми.
             if (numericVerdict(prediction.verdict())) {
                 fillNumbers(result, campaign, prediction);
             }
             result.setBudgetAny(prediction.budgetAny());
             result.setModelScope(scope);
-            // границы дневного бюджета обучающих данных значимы и в предупреждении:
-            // по ним видно, какой бюджет модель вообще способна оценить
+            // Показываем в предупреждении, какой дневной бюджет модель способна оценить.
             result.setDayBudgetMin(prediction.dayBudgetMin() == null
                     ? null : CurrencyRates.fromBase(campaign.getCurrency(), prediction.dayBudgetMin()));
             result.setDayBudgetMax(prediction.dayBudgetMax() == null
@@ -366,8 +362,6 @@ public class ForecastService {
         return "OWN".equals(trimmed) || "GENERAL".equals(trimmed) ? trimmed : "BLEND";
     }
 
-    // ----- смешивание моделей и расчёт -----
-
     private record Prediction(double ratio, double lower, double upper, double agreement, Double paybackDays,
                               Double budgetMin, Double budgetMax, boolean budgetAny, boolean budgetOutOfRange,
                               Double dayBudgetMin, Double dayBudgetMax, String verdict, boolean baseline,
@@ -390,11 +384,7 @@ public class ForecastService {
         ), organizationId, budgetBase.doubleValue(), duration, snapshot, scope);
     }
 
-    /**
-     * Прогноз с выбранной областью: BLEND — своя модель вместе с общей, OWN — только
-     * данные организации (при отсутствии модели — простая оценка по её фактам), GENERAL —
-     * только модель системы.
-     */
+    /** BLEND/OWN/GENERAL — выбор области расчёта, как в UI. */
     private Prediction blend(MlPredictCommand command, long organizationId, double budget, int duration,
                              ObservedSnapshot snapshot, String scope) {
         MlModel general = activeGeneral()
@@ -402,7 +392,6 @@ public class ForecastService {
         int ownCampaigns = countOwnCampaigns(organizationId);
         MlModel own = activeOwn(organizationId).orElse(null);
 
-        // минимальный бюджет площадки — реальное ограничение, из каталога с источником
         BigDecimal dayBudget = BigDecimal.valueOf(budget)
                 .divide(BigDecimal.valueOf(duration), 4, RoundingMode.HALF_UP);
         PlatformCatalog.PlatformInfo platform = PlatformCatalog.find(command.platform()).orElse(null);
@@ -442,9 +431,7 @@ public class ForecastService {
             }
         }
 
-        // канал, которого нет в данных моделей: обе ответили platform_unknown. Сохраняем «сырые»
-        // ответы, чтобы вместо отказа дать грубую прикидку по опыту модели — с явным предупреждением
-        // о низкой уверенности. Точность вырастет, когда по каналу появятся завершённые кампании.
+        // Незнакомый канал — грубая прикидка по модели с предупреждением о низкой точности.
         boolean ownUnknown = ownPrediction != null && ownPrediction.platformUnknown();
         boolean generalUnknown = generalPrediction != null && generalPrediction.platformUnknown();
         MlPredictResponse generalRaw = generalPrediction;
@@ -574,8 +561,7 @@ public class ForecastService {
         double dayBudget = budget / duration;
         double minDay = points.stream().mapToDouble(point -> point[2]).min().orElse(0.0);
         double maxDay = points.stream().mapToDouble(point -> point[2]).max().orElse(0.0);
-        // нижняя граница — физическая (при таких ставках реклама не показывается),
-        // верхняя — с большим допуском: у организации может быть всего одна кампания-эталон
+        // Верхняя граница с запасом: эталонных кампаний может быть мало.
         boolean outOfRange = dayBudget < MIN_MEANINGFUL_DAY_BUDGET
                 || (maxDay > 0 && dayBudget > maxDay * 10);
         String verdict = outOfRange ? "OUT_OF_RANGE"
@@ -668,8 +654,6 @@ public class ForecastService {
         return days <= duration ? days : null;
     }
 
-    // ----- вспомогательные -----
-
     private record ObservedSnapshot(int days, double cost, double revenue, double costLast7, double revenueLast7,
                                      LocalDate firstDay) {
     }
@@ -704,8 +688,7 @@ public class ForecastService {
         if (requested == null) {
             return snapshot.days() + 30;
         }
-        // Длительность, равная числу дней данных, допустима: кампания заканчивается сегодня.
-        // Без этого план всегда покрывал бы больший срок, чем факт, и сравнение было бы смещено.
+        // Длительность может равняться числу дней данных, иначе план сместит сравнение.
         if (requested < snapshot.days()) {
             throw new IllegalArgumentException(
                     "кампания уже длится " + snapshot.days() + " дней — полная длительность не может быть меньше");

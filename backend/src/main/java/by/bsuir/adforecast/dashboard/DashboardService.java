@@ -122,9 +122,7 @@ public class DashboardService {
         List<DashboardResponse.PlanFactRow> comparable = planVsFact.stream()
                 .filter(DashboardResponse.PlanFactRow::comparable)
                 .toList();
-        // Знаковое отклонение и ошибка — разные вещи: первое показывает смещение модели,
-        // второе — насколько она промахивается. Раньше наружу отдавалось только смещение,
-        // но подписывалось как «средняя ошибка», и разброс прятался за взаимным гашением.
+        // Смещение (bias) и абсолютная ошибка — разные метрики, выводим обе.
         BigDecimal planVsFactAvgError = null;
         BigDecimal planVsFactBias = null;
         BigDecimal planVsFactAvgErrorPercent = null;
