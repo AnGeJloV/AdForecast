@@ -172,18 +172,28 @@ export function CampaignPage() {
           </div>
 
           {campaign.status === 'FINISHED' ? (
-            <div className="card">
-              <div className="card-head">
-                <div>
-                  <h2>Окупаемость по факту</h2>
-                  <div className="csub">кампания завершена — прогноз не требуется</div>
+            <>
+              <div className="card">
+                <div className="card-head">
+                  <div>
+                    <h2>Окупаемость по факту</h2>
+                    <div className="csub">кампания завершена — новые прогнозы не требуются</div>
+                  </div>
+                </div>
+                <div className="fact-line">
+                  Вложено {fmtMoney(campaign.totalCost, campaign.currency)}, получено {fmtMoney(campaign.totalRevenue, campaign.currency)}
+                  {' — коэффициент '}{fmtCoef(campaign.totalCost > 0 ? campaign.totalRevenue / campaign.totalCost : null)}
                 </div>
               </div>
-              <div className="fact-line">
-                Вложено {fmtMoney(campaign.totalCost, campaign.currency)}, получено {fmtMoney(campaign.totalRevenue, campaign.currency)}
-                {' — коэффициент '}{fmtCoef(campaign.totalCost > 0 ? campaign.totalRevenue / campaign.totalCost : null)}
-              </div>
-            </div>
+              {lastForecast && (
+                <ForecastCard
+                  campaign={campaign}
+                  lastForecast={lastForecast}
+                  onCompleted={(forecast) => setLastForecast(forecast)}
+                  readOnly
+                />
+              )}
+            </>
           ) : (
             <ForecastCard
               campaign={campaign}
@@ -219,14 +229,18 @@ export function CampaignPage() {
   )
 }
 
-function ForecastCard({ campaign, lastForecast, onCompleted }: {
+function ForecastCard({ campaign, lastForecast, onCompleted, readOnly }: {
   campaign: CampaignDetail
   lastForecast: ForecastResult | null
   onCompleted: (forecast: ForecastResult) => void
+  readOnly?: boolean
 }) {
   const isPlanned = campaign.status === 'PLANNED'
   const hasHistory = campaign.daysCount > 0
-  const defaultDuration = hasHistory ? campaign.daysCount + 30 : 90
+  // переиспользуем длительность последнего прогноза, если она есть
+  const defaultDuration = lastForecast?.durationDays
+    ? lastForecast.durationDays
+    : hasHistory ? campaign.daysCount + 30 : 90
   const [duration, setDuration] = useState(String(defaultDuration))
   const [startMonth, setStartMonth] = useState(String(new Date().getMonth() + 1))
   const [scope, setScope] = useState<ModelScope>('BLEND')
@@ -254,11 +268,23 @@ function ForecastCard({ campaign, lastForecast, onCompleted }: {
       setError(`кампания уже длится ${campaign.daysCount} ${plural(campaign.daysCount, ['день', 'дня', 'дней'])} — полная длительность не может быть меньше`)
       return
     }
+    const startMonthValue = isPlanned ? Number(startMonth) : null
+    const unchanged = lastForecast
+      && durationValue === lastForecast.durationDays
+      && startMonthValue === lastForecast.startMonth
+      && (lastForecast.modelScope ?? 'BLEND') === scope
+      && campaign.budget === lastForecast.budget
+      && campaign.currency === lastForecast.currency
+    if (unchanged) {
+      // параметры не менялись — показываем готовый прогноз без нового расчёта
+      setResult(lastForecast)
+      return
+    }
     setBusy(true)
     try {
       const forecast = await api.runForecast(campaign.id, {
         durationDays: durationValue,
-        startMonth: isPlanned ? Number(startMonth) : null,
+        startMonth: startMonthValue,
         modelScope: scope,
       })
       setResult(forecast)
@@ -339,16 +365,13 @@ function ForecastCard({ campaign, lastForecast, onCompleted }: {
           </div>
         </div>
       </div>
+      {!readOnly && (
+      <>
       <form onSubmit={submit}>
-        <div className="form-row">
+        <div className="form-row forecast-fields">
           <div className="field">
             <label>{isPlanned ? 'Длительность кампании, дней' : 'Всего продлится кампания, дней'}</label>
             <input inputMode="numeric" value={duration} onChange={(event) => setDuration(event.target.value)} />
-            {hasHistory && (
-              <div className="hint">
-                уже есть данные за {campaign.daysCount} {plural(campaign.daysCount, ['день', 'дня', 'дней'])}
-              </div>
-            )}
           </div>
           {isPlanned && (
             <div className="field">
@@ -379,21 +402,28 @@ function ForecastCard({ campaign, lastForecast, onCompleted }: {
           </div>
         </div>
       </form>
-      {error && <div className="form-error" style={{ marginTop: 12 }}>{error}</div>}
-      {result && !isPlanned && (result.historyDays ?? 0) !== campaign.daysCount && (
+      {hasHistory && (
+        <div className="fg-hint">
+          уже есть данные за {campaign.daysCount} {plural(campaign.daysCount, ['день', 'дня', 'дней'])}
+        </div>
+      )}
+      </>
+      )}
+      {error && !readOnly && <div className="form-error" style={{ marginTop: 12 }}>{error}</div>}
+      {!readOnly && result && !isPlanned && (result.historyDays ?? 0) !== campaign.daysCount && (
         <div className="stale-hint">
           С момента расчёта появились новые данные: сейчас {campaign.daysCount}{' '}
           {plural(campaign.daysCount, ['день', 'дня', 'дней'])} — пересчитайте прогноз.
         </div>
       )}
-      {result && String(result.durationDays) !== duration && (
+      {!readOnly && result && String(result.durationDays) !== duration && (
         <div className="stale-hint">
           В форме указана длительность {duration} {plural(Number(duration), ['день', 'дня', 'дней'])}, а показанный
           результат рассчитан на {result.durationDays} {plural(Number(result.durationDays ?? 0), ['день', 'дня', 'дней'])} —
           нажмите «Рассчитать», чтобы пересчитать.
         </div>
       )}
-      {result && snapshotChanged && (
+      {!readOnly && result && snapshotChanged && (
         <div className="stale-hint">
           Бюджет или валюта кампании изменились после расчёта. Показан снимок прежнего прогноза —
           нажмите «Рассчитать», чтобы пересчитать на новых параметрах.

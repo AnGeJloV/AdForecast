@@ -151,10 +151,15 @@ def build_campaign(rng: random.Random, campaign_id: int, account_id: int, status
     duration, start, end = campaign_timeline(rng, status, today)
     # от 300 BYN — реальный минимум бюджета на систему в Беларуси (ECOM Digital, 2026)
     budget = round(math.exp(rng.uniform(math.log(600), math.log(60000))), 2)
+    min_day = platform[MIN_DAY_BUDGET]
+    # бюджет должен держать дневной минимум площадки и при длинном прогнозе,
+    # иначе модель вернёт «бюджет ниже минимума»
+    budget = max(budget, min_day * 120)
     day_budget = budget / duration
-    if day_budget < platform[MIN_DAY_BUDGET]:
-        day_budget = platform[MIN_DAY_BUDGET]
+    if day_budget < min_day:
+        day_budget = min_day
         budget = round(day_budget * duration, 2)
+    budget = round(budget, 2)
     campaign_noise = lognormal(rng, noise)
     niche = NICHES[rng.randrange(len(NICHES))]
     name = f"{platform[1]}_{niche}_{start.year if start else today.year}"
@@ -277,11 +282,12 @@ def summarize(campaigns: list) -> None:
           f"окупаемых {sum(1 for r in all_ratios if r >= 1.0) / n:.0%}")
 
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Генерация синтетических данных AdForecast")
     parser.add_argument("--campaigns", type=int, default=800, help="количество завершенных кампаний")
-    parser.add_argument("--active", type=int, default=12, help="количество активных кампаний")
-    parser.add_argument("--planned", type=int, default=8, help="количество планируемых кампаний")
+    parser.add_argument("--active", type=int, default=72, help="количество активных кампаний")
+    parser.add_argument("--planned", type=int, default=40, help="количество планируемых кампаний")
     parser.add_argument("--exports", type=int, default=6, help="количество CSV-выгрузок рекламных кабинетов")
     parser.add_argument("--noise", type=float, default=0.15, help="скрытый шум окупаемости кампании (sigma)")
     parser.add_argument("--seed", type=int, default=42, help="зерно генератора")
@@ -297,6 +303,20 @@ def main() -> None:
     accounts = [
         (i + 1, f"{name}_кабинет", name)
         for i, (name, *_rest) in enumerate(PLATFORMS)
+    ]
+
+    # Демо-организация обучения несёт основной пул; у пользователей — свои кампании.
+    demo_org = [(2, "Демо-организация (обучение)")]
+    demo_hash = "$2a$06$MlVSPvtno61e7qNdSVpOkeDAoCXrr8sfKElJsa.R0uFkkEWuCZ1f2"
+    users = [
+        (3, 1, "demo", "demo@adforecast.by", "Демо Маркетолог", demo_hash, 2),
+        (4, 1, "alena", "alena@adforecast.by", "Алена Семёнова", demo_hash, 2),
+        (5, 1, "maxim", "maxim@adforecast.by", "Максим Баранов", demo_hash, 2),
+        (6, 1, "olga", "olga@adforecast.by", "Ольга Ковалёва", demo_hash, 2),
+        (7, 1, "dmitry", "dmitry@adforecast.by", "Дмитрий Козлов", demo_hash, 2),
+        (8, 1, "ekaterina", "ekaterina@adforecast.by", "Екатерина Мороз", demo_hash, 2),
+        (9, 1, "sergey", "sergey@adforecast.by", "Сергей Павлов", demo_hash, 2),
+        (10, 1, "irina", "irina@adforecast.by", "Ирина Соколова", demo_hash, 2),
     ]
 
     campaigns = []
@@ -332,17 +352,42 @@ def main() -> None:
             metric_id += 1
         upload_id += 1
 
-    access = [(i, 2, c["campaign_id"]) for i, c in enumerate(campaigns, start=1)]
+    # Раздача кампаний: каждому маркетологу небольшой набор, демо-пользователю — основной пул.
+    pool = {"FINISHED": [c for c in campaigns if c["status"] == "FINISHED"],
+            "ACTIVE": [c for c in campaigns if c["status"] == "ACTIVE"],
+            "PLANNED": [c for c in campaigns if c["status"] == "PLANNED"]}
+    for key in pool:
+        rng.shuffle(pool[key])
+    access = []
+    aid = 1
+    fi = ai = pi = 0
+    distributors = [2, 4, 5, 6, 7, 8, 9, 10]  # angejlov + маркетологи
+    for uid in distributors:
+        fin = pool["FINISHED"][fi:fi + 24]; fi += 24
+        act = pool["ACTIVE"][ai:ai + 6]; ai += 6
+        plan = pool["PLANNED"][pi:pi + 3]; pi += 3
+        for c in fin + act + plan:
+            access.append((aid, uid, c["campaign_id"])); aid += 1
+    for c in pool["FINISHED"][fi:] + pool["ACTIVE"][ai:] + pool["PLANNED"][pi:]:
+        access.append((aid, 3, c["campaign_id"])); aid += 1
 
     with (outdir / "seed_data.sql").open("w", encoding="utf-8", newline="\n") as out:
-        write_batches(out, "ad_accounts", ["account_id", "account_name", "platform"], accounts, "ad_accounts_account_id_seq")
+        write_batches(out, "organizations",
+                      ["organization_id", "organization_name"], demo_org, "organizations_organization_id_seq")
+        write_batches(out, "users",
+                      ["user_id", "role_id", "login", "email", "password_hash", "full_name", "is_active", "organization_id"],
+                      [(u[0], u[1], u[2], u[3], u[5], u[4], True, u[6]) for u in users],
+                      "users_user_id_seq")
+        write_batches(out, "ad_accounts",
+                      ["account_id", "account_name", "platform", "organization_id"],
+                      [(a[0], a[1], a[2], 2) for a in accounts], "ad_accounts_account_id_seq")
         campaign_rows = [
             (c["campaign_id"], c["account_id"], c["name"], c["budget"], "BYN", c["status"],
-             c["start"] or today)
+             c["start"] or today, 2)
             for c in campaigns
         ]
         write_batches(out, "campaigns",
-                      ["campaign_id", "account_id", "campaign_name", "budget", "currency", "status", "created_at"],
+                      ["campaign_id", "account_id", "campaign_name", "budget", "currency", "status", "created_at", "organization_id"],
                       campaign_rows, "campaigns_campaign_id_seq")
         write_batches(out, "campaign_access", ["access_id", "user_id", "campaign_id"], access, "campaign_access_access_id_seq")
         write_batches(out, "uploads",

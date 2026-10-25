@@ -151,10 +151,13 @@ export function DashboardPage() {
 
       <div className="grid row-kpi">
         <div className="grid kpi-square">
-          <div className="card stat">
-            <div className="label">Активные кампании</div>
-            <div className="num">{fmtNum(data.campaignsActive)}</div>
-            <div className="delta muted">планируемых: {fmtNum(data.campaignsPlanned)} · завершённых: {fmtNum(data.campaignsFinished)}</div>
+          <div className="card stat stat3">
+            <div className="label">Кампании</div>
+            <div className="camp-grid">
+              <div className="cell vsep"><div className="v">{fmtNum(data.campaignsActive)}</div><div className="k">активные</div></div>
+              <div className="cell"><div className="v">{fmtNum(data.campaignsPlanned)}</div><div className="k">планируемые</div></div>
+              <div className="cell full"><div className="v">{fmtNum(data.campaignsFinished)}</div><div className="k">завершённые</div></div>
+            </div>
           </div>
           <div className="card stat">
             <div className="label">Вложено, {currency}</div>
