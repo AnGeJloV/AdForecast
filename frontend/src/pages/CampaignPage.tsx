@@ -545,7 +545,7 @@ function FinishCampaignModal({ open, campaign, onClose, onFinished }: {
       {error && <div className="form-error">{error}</div>}
       <p style={{ marginTop: 0, lineHeight: 1.7 }}>
         Кампания станет обучающим примером для модели вашей организации — она сама переобучится на новых
-        данных, — и появится в разделе «план против факта».
+        данных, — и появится в разделе «прогноз против факта».
       </p>
       <table style={{ marginBottom: 4 }}>
         <tbody>

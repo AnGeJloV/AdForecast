@@ -27,9 +27,7 @@ import {
   verdictTone,
 } from '../utils/format'
 
-const PAGE_SIZE = 8
 const PLAN_FACT_PAGE_SIZE = 6
-type StatusFilter = 'all' | 'ACTIVE' | 'FINISHED' | 'PLANNED'
 
 type FlowPeriod = 'DAY' | 'WEEK' | 'MONTH' | 'ALL'
 
@@ -49,25 +47,6 @@ const FLOW_PERIODS: Record<FlowPeriod, FlowPeriodOption> = {
 }
 const FLOW_PERIOD_ORDER: FlowPeriod[] = ['DAY', 'WEEK', 'MONTH', 'ALL']
 
-function campaignState(campaign: CampaignSummary): string {
-  if (campaign.status === 'PLANNED') {
-    return 'планируется'
-  }
-  if (campaign.latestVerdict) {
-    return verdictLabel(campaign.latestVerdict).toLowerCase()
-  }
-  return paybackLabel(paybackTone(ratioValue(campaign.actualRoi)))
-}
-
-const CAMPAIGN_COLUMNS: SortColumn<CampaignSummary>[] = [
-  { id: 'name', title: 'Кампания', value: (row) => row.campaignName },
-  { id: 'platform', title: 'Платформа', value: (row) => row.platform },
-  { id: 'budget', title: 'Бюджет', value: (row) => row.budget },
-  { id: 'verdict', title: 'Прогноз', value: (row) => (row.latestVerdict === null ? null : verdictLabel(row.latestVerdict)) },
-  { id: 'coef', title: 'Коэффициент', value: (row) => row.latestPaybackRatio },
-  { id: 'state', title: 'Статус', value: campaignState },
-]
-
 const PLAN_FACT_COLUMNS: SortColumn<PlanFactRow>[] = [
   { id: 'name', title: 'Кампания', value: (row) => row.campaignName },
   { id: 'plan', title: 'Прогноз', value: (row) => row.forecastRoi },
@@ -82,10 +61,6 @@ export function DashboardPage() {
   const [cashflow, setCashflow] = useState<CashflowPoint[]>([])
   const [flowPeriod, setFlowPeriod] = useState<FlowPeriod>('WEEK')
   const [error, setError] = useState('')
-
-  const [filter, setFilter] = useState<StatusFilter>('all')
-  const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
 
   const flowView = FLOW_PERIODS[flowPeriod]
 
@@ -123,26 +98,8 @@ export function DashboardPage() {
     return { cost, revenue, profit: revenue - cost }
   }, [cashflow])
 
-  const rows = useMemo(() => {
-    const query = search.trim().toLowerCase()
-    return campaigns.filter((campaign) => {
-      if (filter !== 'all' && campaign.status !== filter) {
-        return false
-      }
-      if (query && !campaign.campaignName.toLowerCase().includes(query)) {
-        return false
-      }
-      return true
-    })
-  }, [campaigns, filter, search])
-
-  const campaignTable = useSortTable(rows, CAMPAIGN_COLUMNS)
   const planFactTable = useSortTable(data?.planVsFact ?? [], PLAN_FACT_COLUMNS)
   const [factPage, setFactPage] = useState(1)
-
-  const pageCount = Math.max(1, Math.ceil(campaignTable.rows.length / PAGE_SIZE))
-  const currentPage = Math.min(page, pageCount)
-  const pageRows = campaignTable.rows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
 
   const factPages = Math.max(1, Math.ceil(planFactTable.rows.length / PLAN_FACT_PAGE_SIZE))
   const factCurrentPage = Math.min(factPage, factPages)
@@ -154,13 +111,6 @@ export function DashboardPage() {
 
   const comparableCount = data.planVsFact.filter((row) => row.comparable).length
   const withStructure = structure.ok + structure.mid + structure.bad
-  const biasNote = data.planVsFactBias === null
-    ? ''
-    : Math.abs(data.planVsFactBias) < 2
-      ? 'Смещения нет — прогноз промахивается в обе стороны.'
-      : data.planVsFactBias > 0
-        ? `Смещение +${fmtDecimal(data.planVsFactBias / 100)}: модель систематически занижает окупаемость.`
-        : `Смещение −${fmtDecimal(Math.abs(data.planVsFactBias) / 100)}: модель систематически завышает окупаемость.`
 
   return (
     <Layout>
@@ -276,7 +226,7 @@ export function DashboardPage() {
         <div className="card">
           <div className="card-head">
             <div>
-              <h2>План против факта</h2>
+              <h2>Прогноз против факта</h2>
               <div className="csub">закрытые кампании — совпал ли прогноз</div>
             </div>
           </div>
@@ -316,7 +266,6 @@ export function DashboardPage() {
               Средняя ошибка прогноза по {comparableCount} {comparableCount === 1 ? 'сопоставимой кампании' : 'сопоставимым кампаниям'} —
               {' '}<b>{fmtDecimal(data.planVsFactAvgError / 100)}</b> на каждый вложенный
               {data.planVsFactAvgErrorPercent !== null && <> ({fmtDecimal(data.planVsFactAvgErrorPercent)} %)</>}.
-              {' '}{biasNote}
             </div>
           )}
         </div>
@@ -367,40 +316,27 @@ export function DashboardPage() {
       <div className="card table-card">
         <div className="card-head">
           <div>
-            <h2>Кампании</h2>
-            <div className="csub">нажмите на строку, чтобы открыть кампанию</div>
+            <h2>Последние кампании</h2>
+            <div className="csub">последние добавленные — нажмите на строку, чтобы открыть</div>
           </div>
-          <div className="table-tools">
-            <div className="fchips">
-              {([['all', 'Все'], ['ACTIVE', 'Активные'], ['FINISHED', 'Завершённые'], ['PLANNED', 'Планируемые']] as [StatusFilter, string][]).map(([value, label]) => (
-                <button
-                  key={value}
-                  className={`fchip${filter === value ? ' active' : ''}`}
-                  onClick={() => { setFilter(value); setPage(1) }}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <input
-              className="search"
-              placeholder="Поиск…"
-              value={search}
-              onChange={(event) => { setSearch(event.target.value); setPage(1) }}
-            />
-          </div>
+          <button className="link" onClick={() => navigate('/campaigns')}>Все кампании →</button>
         </div>
-        {pageRows.length === 0
-          ? <EmptyState>кампании не найдены</EmptyState>
+        {campaigns.length === 0
+          ? <EmptyState>пока нет кампаний</EmptyState>
           : (
             <table>
               <thead>
                 <tr>
-                  {CAMPAIGN_COLUMNS.map((column) => <SortTh key={column.id} table={campaignTable} column={column} />)}
+                  <th>Кампания</th>
+                  <th>Платформа</th>
+                  <th>Бюджет</th>
+                  <th>Прогноз</th>
+                  <th>Коэффициент</th>
+                  <th>Статус</th>
                 </tr>
               </thead>
               <tbody>
-                {pageRows.map((campaign) => {
+                {campaigns.slice(0, 6).map((campaign) => {
                   const tone = campaign.latestVerdict
                     ? verdictTone(campaign.latestVerdict)
                     : campaign.status === 'PLANNED'
@@ -430,10 +366,6 @@ export function DashboardPage() {
               </tbody>
             </table>
             )}
-        <div className="table-foot">
-          <span className="rows-range">{rangeLabel(currentPage, PAGE_SIZE, pageRows.length, rows.length, ['кампания', 'кампании', 'кампаний'])}</span>
-          <Pager page={currentPage} pageCount={pageCount} onChange={setPage} />
-        </div>
       </div>
     </Layout>
   )
