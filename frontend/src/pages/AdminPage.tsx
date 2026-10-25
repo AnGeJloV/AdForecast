@@ -19,7 +19,7 @@ import type {
 } from '../api/types'
 import { Layout } from '../components/Layout'
 import { Modal } from '../components/Modal'
-import { Donut } from '../components/Charts'
+import { CHART_COLORS, Donut } from '../components/Charts'
 import { SortTh, useSortTable } from '../components/SortableTable'
 import type { SortColumn, SortTable } from '../components/SortableTable'
 import { Select } from '../components/Select'
@@ -100,28 +100,37 @@ export function AdminPage() {
 
 /* ===================== СВОДКА ===================== */
 
+/**
+ * Группа действия для круговой диаграммы. Раньше распознавались только загрузки
+ * и обучение, поэтому прогнозы, кампании и входы сваливались в «прочее».
+ */
 function auditCategory(action: string): string {
-  if (action.includes('загрузка')) return 'данные'
-  if (action.includes('пользователя') || action.includes('регистрация')) return 'пользователи'
-  if (action.includes('обучения') || action.includes('обучение') || action.includes('модели')) return 'модели'
-  if (action.includes('резервной')) return 'бэкапы'
+  if (action.includes('кампани')) return 'кампании'
+  if (action.includes('прогноз')) return 'прогнозы'
+  if (action.includes('загрузка') || action.includes('отчёт') || action.includes('отчет')
+    || action.includes('резервн') || action.includes('копи')) return 'данные'
+  if (action.includes('обучени') || action.includes('модел')) return 'модели'
+  if (action.includes('вход') || action.includes('выход') || action.includes('регистрац')
+    || action.includes('пользовател') || action.includes('блокировк')) return 'пользователи'
   return 'прочее'
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
-  'данные': 'загрузки данных',
-  'пользователи': 'пользователи',
+  'кампании': 'кампании',
+  'прогнозы': 'прогнозы',
+  'данные': 'данные и отчёты',
   'модели': 'модели и обучение',
-  'бэкапы': 'резервные копии',
+  'пользователи': 'входы и учётные записи',
   'прочее': 'прочее',
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
-  'данные': '#F59E0B',
-  'пользователи': '#34D399',
-  'модели': '#60A5FA',
-  'бэкапы': '#A78BFA',
-  'прочее': '#6B7280',
+  'кампании': CHART_COLORS.accent,
+  'прогнозы': CHART_COLORS.ok,
+  'данные': CHART_COLORS.info,
+  'модели': CHART_COLORS.violet,
+  'пользователи': CHART_COLORS.slate,
+  'прочее': CHART_COLORS.muted,
 }
 
 function SummaryTab({ goAudit, onOpenCampaign }: { goAudit: () => void; onOpenCampaign: (id: number) => void }) {
@@ -151,7 +160,7 @@ function SummaryTab({ goAudit, onOpenCampaign }: { goAudit: () => void; onOpenCa
       .map(([category, value]) => ({
         label: CATEGORY_LABELS[category] ?? category,
         value,
-        color: CATEGORY_COLORS[category] ?? '#6B7280',
+        color: CATEGORY_COLORS[category] ?? CHART_COLORS.muted,
       }))
   }, [entries])
 

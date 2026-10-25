@@ -27,11 +27,16 @@ public class DashboardController {
         return dashboardService.build(principal.userId());
     }
 
+    /**
+     * @param granularity шаг корзины: DAY, WEEK, MONTH, QUARTER
+     * @param limit       сколько последних корзин вернуть; без него — вся история
+     */
     @GetMapping("/cashflow")
     @PreAuthorize("hasAuthority('dashboard.view')")
-    public List<CashflowPoint> cashflow(@RequestParam(defaultValue = "12") int weeks,
+    public List<CashflowPoint> cashflow(@RequestParam(defaultValue = "WEEK") String granularity,
+                                        @RequestParam(required = false) Integer limit,
                                         Authentication authentication) {
         AuthPrincipal principal = (AuthPrincipal) authentication.getPrincipal();
-        return dashboardService.cashflow(principal.userId(), weeks);
+        return dashboardService.cashflow(principal.userId(), granularity, limit);
     }
 }

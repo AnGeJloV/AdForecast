@@ -9,6 +9,7 @@ import type {
   CampaignDetail,
   CampaignSummary,
   CampaignUpdateRequest,
+  CashflowGranularity,
   CashflowPoint,
   CompareResult,
   CompareVariant,
@@ -164,7 +165,11 @@ export const api = {
     request<AdAccount>('/api/ad-accounts', { method: 'POST', body: JSON.stringify(data) }),
 
   dashboard: () => request<DashboardData>('/api/dashboard'),
-  cashflow: (weeks: number) => request<CashflowPoint[]>(`/api/dashboard/cashflow?weeks=${weeks}`),
+  // limit === null — вся история (режим «за всё время»)
+  cashflow: (granularity: CashflowGranularity, limit: number | null) =>
+    request<CashflowPoint[]>(
+      `/api/dashboard/cashflow?granularity=${granularity}${limit === null ? '' : `&limit=${limit}`}`,
+    ),
 
   uploads: () => request<UploadListItem[]>('/api/uploads'),
   campaignUploads: (campaignId: number) => request<UploadItem[]>(`/api/campaigns/${campaignId}/uploads`),

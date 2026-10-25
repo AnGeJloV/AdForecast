@@ -134,8 +134,10 @@ export interface DailyMetricPoint {
   clicks: number
 }
 
+export type CashflowGranularity = 'DAY' | 'WEEK' | 'MONTH' | 'QUARTER'
+
 export interface CashflowPoint {
-  weekStart: string
+  periodStart: string
   cost: number
   revenue: number
 }
@@ -178,7 +180,12 @@ export interface DashboardData {
   forecastsCompleted: number
   channels: DashboardChannel[]
   planVsFact: PlanFactRow[]
-  planVsFactAvgDeviation: number | null
+  /** средняя абсолютная ошибка по сопоставимым кампаниям, п.п. ROI */
+  planVsFactAvgError: number | null
+  /** среднее знаковое отклонение: плюс — прогноз занижает окупаемость, п.п. ROI */
+  planVsFactBias: number | null
+  /** средняя относительная ошибка к прогнозу, % */
+  planVsFactAvgErrorPercent: number | null
 }
 
 export interface UploadItem {

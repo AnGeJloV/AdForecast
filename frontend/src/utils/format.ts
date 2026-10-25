@@ -141,6 +141,10 @@ export const MONTHS = [
   'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
 ]
 
+export const MONTHS_SHORT = [
+  'янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек',
+]
+
 export function monthName(month: number): string {
   return MONTHS[month - 1] ?? String(month)
 }

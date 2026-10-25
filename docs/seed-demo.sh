@@ -178,10 +178,9 @@ else
     }
 
     # Активные, которые затем «завершаем»: их прогнозы (сделанные по ходу кампании)
-    # становятся строками «план против факта». Первые 4 — длительность = дни данных + 30
-    # (сопоставимо), следующие 2 — сильно больше (несопоставимо).
+    # становятся строками «план против факта». Прогноз считается на фактический срок,
+    # поэтому план и факт покрывают один период и отклонение показывает качество модели.
     FLIP_IDS=""
-    INDEX=0
     $DB -t -A -F'|' -c "
         SELECT v.campaign_id, v.days_count
         FROM v_campaign_summary v
@@ -189,9 +188,7 @@ else
           AND v.campaign_id IN (SELECT campaign_id FROM campaign_access WHERE user_id = $ANGEJLOV_ID)
         ORDER BY v.days_count DESC
         LIMIT 6" | while IFS='|' read -r cid days; do
-        INDEX=$((INDEX + 1))
-        if [ "$INDEX" -le 4 ]; then dur=$((days + 30)); else dur=$((days + 90)); fi
-        if run_forecast "$cid" "$dur" 10; then
+        if run_forecast "$cid" "$days" 10; then
             if numeric_verdict "$FORECAST_VERDICT"; then
                 echo "$cid" >> /tmp/adforecast_flip_ids
             else
@@ -229,27 +226,32 @@ else
 fi
 
 # ── 4б. Модель организации обучается сама (без администратора) ───────────
-say "Ожидание автоматического обучения модели организации"
-OWN=0
-for _ in $(seq 1 48); do
-    OWN=$($DB -t -A -c "SELECT count(*) FROM ml_models WHERE organization_id IS NOT NULL AND is_active AND training_signature IS NOT NULL")
-    [ "$OWN" != "0" ] && break
-    # ленивый триггер срабатывает на запросе прогноза
-    CID=$($DB -t -A -c "SELECT campaign_id FROM campaigns WHERE status = 'PLANNED' ORDER BY campaign_id LIMIT 1")
-    curl -s -X POST "$API/campaigns/$CID/forecasts" -H "Authorization: Bearer $TOKEN" \
-        -H "Content-Type: application/json" -d '{"durationDays":60,"startMonth":12}' > /dev/null
-    sleep 5
-done
-if [ "$OWN" != "0" ]; then
-    echo "   своя модель: $($DB -t -A -c "SELECT model_name || ' ' || model_version FROM ml_models WHERE organization_id IS NOT NULL AND is_active")"
-    # контрольный прогноз после появления своей модели — должен ею воспользоваться
-    CID=$($DB -t -A -c "SELECT campaign_id FROM campaigns WHERE status = 'PLANNED' ORDER BY campaign_id LIMIT 1")
-    RESULT=$(curl -s -X POST "$API/campaigns/$CID/forecasts" -H "Authorization: Bearer $TOKEN" \
-        -H "Content-Type: application/json" -d '{"durationDays":60,"startMonth":12}')
-    echo "   контрольный прогноз: $(echo "$RESULT" | sed -n 's/.*"verdict":"\([^"]*\)".*/\1/p'), своя модель $(echo "$RESULT" | sed -n 's/.*"ownModelVersion":"\([^"]*\)".*/\1/p'), вес $(echo "$RESULT" | sed -n 's/.*"ownWeight":\([0-9.]*\).*/\1/p')"
-    echo "   основание: $(echo "$RESULT" | sed -n 's/.*"basis":"\([^"]*\)".*/\1/p')"
-else
-    echo "   ⚠ своя модель пока не готова — прогнозы работают на общей"
+# Блок — часть первичного наполнения: он ждёт автообучение и проверяет, что прогноз
+# опирается на свою модель. При повторных запусках его надо пропускать, иначе каждая
+# проверка добавляла бы ещё один прогноз на первую планируемую кампанию.
+if [ "$FORECASTS" -lt 10 ]; then
+    say "Ожидание автоматического обучения модели организации"
+    OWN=0
+    for _ in $(seq 1 48); do
+        OWN=$($DB -t -A -c "SELECT count(*) FROM ml_models WHERE organization_id IS NOT NULL AND is_active AND training_signature IS NOT NULL")
+        [ "$OWN" != "0" ] && break
+        # ленивый триггер срабатывает на запросе прогноза
+        CID=$($DB -t -A -c "SELECT campaign_id FROM campaigns WHERE status = 'PLANNED' ORDER BY campaign_id LIMIT 1")
+        curl -s -X POST "$API/campaigns/$CID/forecasts" -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" -d '{"durationDays":60,"startMonth":12}' > /dev/null
+        sleep 5
+    done
+    if [ "$OWN" != "0" ]; then
+        echo "   своя модель: $($DB -t -A -c "SELECT model_name || ' ' || model_version FROM ml_models WHERE organization_id IS NOT NULL AND is_active")"
+        # контрольный прогноз после появления своей модели — должен ею воспользоваться
+        CID=$($DB -t -A -c "SELECT campaign_id FROM campaigns WHERE status = 'PLANNED' ORDER BY campaign_id LIMIT 1")
+        RESULT=$(curl -s -X POST "$API/campaigns/$CID/forecasts" -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" -d '{"durationDays":60,"startMonth":12}')
+        echo "   контрольный прогноз: $(echo "$RESULT" | sed -n 's/.*"verdict":"\([^"]*\)".*/\1/p'), своя модель $(echo "$RESULT" | sed -n 's/.*"ownModelVersion":"\([^"]*\)".*/\1/p'), вес $(echo "$RESULT" | sed -n 's/.*"ownWeight":\([0-9.]*\).*/\1/p')"
+        echo "   основание: $(echo "$RESULT" | sed -n 's/.*"basis":"\([^"]*\)".*/\1/p')"
+    else
+        echo "   ⚠ своя модель пока не готова — прогнозы работают на общей"
+    fi
 fi
 
 # ── 5. «План против факта»: кампании с выгрузкой, прогнозом и закрытием ──
@@ -299,7 +301,8 @@ while IFS='|' read -r name platform file; do
 
     # дни, дата первой записи и средний дневной расход — из самой выгрузки
     read -r days first_day per_day <<< "$(awk -F, 'NR > 1 { n++; cost += $4; if (n == 1) first = $1 } END { printf "%d %s %.2f\n", n, first, cost / n }' "$FIXTURES/$file")"
-    duration=$((days + 30))
+    # прогноз на фактический срок выгрузки — план и факт покрывают один период
+    duration=$days
     month=$((10#${first_day:5:2}))
     # бюджет — тот же дневной темп на всю длительность, но не ниже 15 BYN в день:
     # при слишком малом дневном бюджете прогноз вернёт предупреждение и в отчёт не попадёт
@@ -339,7 +342,11 @@ if [ "$EXPORTS" -ge 3 ]; then
     echo "── Отчёты уже выгружались ($EXPORTS) — пропускаю"
 else
     say "Выгрузка отчётов XLSX/PDF (история экспорта)"
-    IDS=$($DB -t -A -c "SELECT forecast_id FROM forecasts WHERE status = 'COMPLETED' ORDER BY forecast_id LIMIT 3")
+    # только прогнозы кампаний демо-маркетолога: чужие вернут 403 и отчёт не создастся
+    IDS=$($DB -t -A -c "SELECT f.forecast_id FROM forecasts f
+        WHERE f.status = 'COMPLETED'
+          AND f.campaign_id IN (SELECT campaign_id FROM campaign_access WHERE user_id = $ANGEJLOV_ID)
+        ORDER BY f.forecast_id LIMIT 3")
     N=0
     for fid in $IDS; do
         # без -o /dev/null: при MSYS_NO_PATHCONV=1 путь не конвертируется в NUL

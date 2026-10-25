@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 @Service
@@ -18,8 +19,9 @@ public class DashboardService {
 
     private static final int COMPARABILITY_TOLERANCE_DAYS = 30;
 
+    /** Гранулярность графика денежного потока: шаг корзины и её предел по умолчанию. */
     private static final String CASHFLOW_SQL = """
-            select date_trunc('week', m.metric_date)::date as week_start,
+            select date_trunc(?, m.metric_date)::date as period_start,
                    sum(m.cost) as cost,
                    sum(m.revenue) as revenue
             from daily_metrics m
@@ -29,6 +31,9 @@ public class DashboardService {
             order by 1 desc
             limit ?
             """;
+
+    /** «Без ограничения»: предел корзин, который заведомо больше любой истории. */
+    private static final int ALL_BUCKETS = 100_000;
 
     /**
      * «План против факта»: факт завершённой кампании против последнего прогноза по ней.
@@ -108,21 +113,40 @@ public class DashboardService {
         List<DashboardResponse.ChannelRow> channels = channels(summaries);
 
         List<DashboardResponse.PlanFactRow> planVsFact = planVsFact(userId);
-        BigDecimal deviationSum = planVsFact.stream()
+        List<DashboardResponse.PlanFactRow> comparable = planVsFact.stream()
                 .filter(DashboardResponse.PlanFactRow::comparable)
-                .map(DashboardResponse.PlanFactRow::deviation)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        long comparableCount = planVsFact.stream().filter(DashboardResponse.PlanFactRow::comparable).count();
-        BigDecimal planVsFactAvgDeviation = comparableCount == 0
-                ? null
-                : deviationSum.divide(BigDecimal.valueOf(comparableCount), 2, RoundingMode.HALF_UP);
+                .toList();
+        // Знаковое отклонение и ошибка — разные вещи: первое показывает смещение модели,
+        // второе — насколько она промахивается. Раньше наружу отдавалось только смещение,
+        // но подписывалось как «средняя ошибка», и разброс прятался за взаимным гашением.
+        BigDecimal planVsFactAvgError = null;
+        BigDecimal planVsFactBias = null;
+        BigDecimal planVsFactAvgErrorPercent = null;
+        if (!comparable.isEmpty()) {
+            BigDecimal count = BigDecimal.valueOf(comparable.size());
+            BigDecimal absoluteSum = BigDecimal.ZERO;
+            BigDecimal signedSum = BigDecimal.ZERO;
+            BigDecimal relativeSum = BigDecimal.ZERO;
+            for (DashboardResponse.PlanFactRow row : comparable) {
+                absoluteSum = absoluteSum.add(row.deviation().abs());
+                signedSum = signedSum.add(row.deviation());
+                // коэффициент прогноза в процентных пунктах: 1,0 = 100
+                BigDecimal plannedPoints = BigDecimal.valueOf(Math.max(100.0 + row.forecastRoi().doubleValue(), 1.0));
+                relativeSum = relativeSum.add(row.deviation().abs()
+                        .multiply(BigDecimal.valueOf(100))
+                        .divide(plannedPoints, 4, RoundingMode.HALF_UP));
+            }
+            planVsFactAvgError = absoluteSum.divide(count, 2, RoundingMode.HALF_UP);
+            planVsFactBias = signedSum.divide(count, 2, RoundingMode.HALF_UP);
+            planVsFactAvgErrorPercent = relativeSum.divide(count, 2, RoundingMode.HALF_UP);
+        }
 
         return new DashboardResponse(
                 total, planned, active, finished,
                 totalBudget, totalCost, totalRevenue, actualRoi,
                 profitable, unprofitable,
                 forecastsTotal, forecastsCompleted,
-                channels, planVsFact, planVsFactAvgDeviation
+                channels, planVsFact, planVsFactAvgError, planVsFactBias, planVsFactAvgErrorPercent
         );
     }
 
@@ -155,14 +179,24 @@ public class DashboardService {
                 .toList();
     }
 
+    /**
+     * Денежный поток корзинами выбранного шага. Без {@code limit} отдаётся вся история —
+     * режим «за всё время». Шаг приходит от клиента, поэтому ограничен белым списком.
+     */
     @Transactional(readOnly = true)
-    public List<CashflowPoint> cashflow(long userId, int weeks) {
-        int limit = Math.min(Math.max(weeks, 1), 52);
+    public List<CashflowPoint> cashflow(long userId, String granularity, Integer limit) {
+        String unit = switch (granularity == null ? "" : granularity.toUpperCase(Locale.ROOT)) {
+            case "DAY" -> "day";
+            case "MONTH" -> "month";
+            case "QUARTER" -> "quarter";
+            default -> "week";
+        };
+        int buckets = limit == null ? ALL_BUCKETS : Math.min(Math.max(limit, 1), 120);
         List<CashflowPoint> points = jdbcTemplate.query(CASHFLOW_SQL, (rs, rowNum) -> new CashflowPoint(
-                rs.getDate("week_start").toLocalDate(),
+                rs.getDate("period_start").toLocalDate(),
                 rs.getBigDecimal("cost"),
                 rs.getBigDecimal("revenue")
-        ), userId, limit);
+        ), unit, userId, buckets);
         return points.reversed();
     }
 

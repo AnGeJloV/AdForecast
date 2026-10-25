@@ -1,9 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, ApiError } from '../api/client'
-import type { CampaignSummary, CashflowPoint, DashboardData, PlanFactRow } from '../api/types'
+import type {
+  CampaignSummary,
+  CashflowGranularity,
+  CashflowPoint,
+  DashboardData,
+  PlanFactRow,
+} from '../api/types'
 import { Layout } from '../components/Layout'
-import { Donut, WeeklyBars } from '../components/Charts'
+import { CashflowBars, CHART_COLORS, Donut } from '../components/Charts'
 import { SortTh, useSortTable } from '../components/SortableTable'
 import type { SortColumn } from '../components/SortableTable'
 import { EmptyState, ErrorBox, PageLoader, Pager, StatusPill } from '../components/Ui'
@@ -22,8 +28,26 @@ import {
 } from '../utils/format'
 
 const PAGE_SIZE = 8
-const PLAN_FACT_PAGE_SIZE = 8
+const PLAN_FACT_PAGE_SIZE = 6
 type StatusFilter = 'all' | 'ACTIVE' | 'FINISHED' | 'PLANNED'
+
+type FlowPeriod = 'DAY' | 'WEEK' | 'MONTH' | 'ALL'
+
+interface FlowPeriodOption {
+  label: string
+  granularity: CashflowGranularity
+  limit: number | null
+  caption: string
+}
+
+/** Варианты блока «Денежный поток»: шаг корзины и глубина истории. */
+const FLOW_PERIODS: Record<FlowPeriod, FlowPeriodOption> = {
+  DAY: { label: 'День', granularity: 'DAY', limit: 14, caption: 'по дням · последние 14 дней' },
+  WEEK: { label: 'Недели', granularity: 'WEEK', limit: 12, caption: 'по неделям · последние 12 недель' },
+  MONTH: { label: 'Месяцы', granularity: 'MONTH', limit: 12, caption: 'по месяцам · последние 12 месяцев' },
+  ALL: { label: 'За всё время', granularity: 'QUARTER', limit: null, caption: 'по кварталам · вся история' },
+}
+const FLOW_PERIOD_ORDER: FlowPeriod[] = ['DAY', 'WEEK', 'MONTH', 'ALL']
 
 function campaignState(campaign: CampaignSummary): string {
   if (campaign.status === 'PLANNED') {
@@ -56,20 +80,29 @@ export function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [campaigns, setCampaigns] = useState<CampaignSummary[]>([])
   const [cashflow, setCashflow] = useState<CashflowPoint[]>([])
+  const [flowPeriod, setFlowPeriod] = useState<FlowPeriod>('WEEK')
   const [error, setError] = useState('')
+
   const [filter, setFilter] = useState<StatusFilter>('all')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
 
+  const flowView = FLOW_PERIODS[flowPeriod]
+
   useEffect(() => {
-    Promise.all([api.dashboard(), api.campaigns(), api.cashflow(12)])
-      .then(([dashboard, campaignList, flow]) => {
+    Promise.all([api.dashboard(), api.campaigns()])
+      .then(([dashboard, campaignList]) => {
         setData(dashboard)
         setCampaigns(campaignList)
-        setCashflow(flow)
       })
       .catch((cause) => setError(cause instanceof ApiError ? cause.message : 'не удалось загрузить дашборд'))
   }, [])
+
+  useEffect(() => {
+    api.cashflow(flowView.granularity, flowView.limit)
+      .then(setCashflow)
+      .catch((cause) => setError(cause instanceof ApiError ? cause.message : 'не удалось загрузить денежный поток'))
+  }, [flowView.granularity, flowView.limit])
 
   const currency = campaigns[0]?.currency ?? 'BYN'
 
@@ -121,6 +154,13 @@ export function DashboardPage() {
 
   const comparableCount = data.planVsFact.filter((row) => row.comparable).length
   const withStructure = structure.ok + structure.mid + structure.bad
+  const biasNote = data.planVsFactBias === null
+    ? ''
+    : Math.abs(data.planVsFactBias) < 2
+      ? 'Смещения нет — прогноз промахивается в обе стороны.'
+      : data.planVsFactBias > 0
+        ? `Смещение +${fmtDecimal(data.planVsFactBias / 100)}: модель систематически занижает окупаемость.`
+        : `Смещение −${fmtDecimal(Math.abs(data.planVsFactBias) / 100)}: модель систематически завышает окупаемость.`
 
   return (
     <Layout>
@@ -192,9 +232,9 @@ export function DashboardPage() {
               centerValue={String(withStructure)}
               centerLabel="кампаний"
               segments={[
-                { label: 'окупаемые', value: structure.ok, color: '#34D399' },
-                { label: 'на границе', value: structure.mid, color: '#FBBF24' },
-                { label: 'убыточные', value: structure.bad, color: '#F87171' },
+                { label: 'окупаемые', value: structure.ok, color: CHART_COLORS.ok },
+                { label: 'на границе', value: structure.mid, color: CHART_COLORS.mid },
+                { label: 'убыточные', value: structure.bad, color: CHART_COLORS.bad },
               ]}
             />
           </div>
@@ -216,10 +256,16 @@ export function DashboardPage() {
           <div className="card-head">
             <div>
               <h2>Денежный поток</h2>
-              <div className="csub">по неделям по всем вашим кампаниям, {currency}</div>
+              <div className="csub">{flowView.caption} · все ваши кампании, {currency}</div>
             </div>
           </div>
-          <WeeklyBars points={cashflow} />
+          <CashflowBars
+            points={cashflow}
+            granularity={flowView.granularity}
+            periods={FLOW_PERIOD_ORDER.map((value) => ({ value, label: FLOW_PERIODS[value].label }))}
+            period={flowPeriod}
+            onPeriodChange={(value) => setFlowPeriod(value as FlowPeriod)}
+          />
           <div className="chart-foot">
             <div className="foot-pill"><span className="lbl">Вложено</span><b>{fmtNum(flowTotals.cost)}</b></div>
             <div className="foot-pill"><span className="lbl">Вернулось</span><b>{fmtNum(flowTotals.revenue)}</b></div>
@@ -249,7 +295,9 @@ export function DashboardPage() {
                       <td>{row.campaignName}</td>
                       <td className="mono">{fmtRatio(row.forecastRoi)}</td>
                       <td className="mono">{fmtRatio(row.actualRoi)}</td>
-                      <td><DeviationPill deviation={row.deviation} comparable={row.comparable} /></td>
+                      <td>
+                        <DeviationPill deviation={row.deviation} forecastRoi={row.forecastRoi} comparable={row.comparable} />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -263,10 +311,12 @@ export function DashboardPage() {
               <Pager page={factCurrentPage} pageCount={factPages} onChange={setFactPage} />
             </div>
           )}
-          {data.planVsFactAvgDeviation !== null && (
+          {data.planVsFactAvgError !== null && (
             <div className="fact-note">
-              Средняя ошибка прогноза по {comparableCount} {comparableCount === 1 ? 'сопоставимой кампании' : 'сопоставимым кампаниям'} — <b>{fmtDecimal(data.planVsFactAvgDeviation)} п.п.</b>
-              {' '}Прогнозам можно доверять при планировании бюджета, но по коротким кампаниям ошибка выше.
+              Средняя ошибка прогноза по {comparableCount} {comparableCount === 1 ? 'сопоставимой кампании' : 'сопоставимым кампаниям'} —
+              {' '}<b>{fmtDecimal(data.planVsFactAvgError / 100)}</b> на каждый вложенный
+              {data.planVsFactAvgErrorPercent !== null && <> ({fmtDecimal(data.planVsFactAvgErrorPercent)} %)</>}.
+              {' '}{biasNote}
             </div>
           )}
         </div>
@@ -389,12 +439,28 @@ export function DashboardPage() {
   )
 }
 
-function DeviationPill({ deviation, comparable }: { deviation: number | null; comparable: boolean }) {
+function DeviationPill({ deviation, forecastRoi, comparable }: {
+  deviation: number | null
+  forecastRoi: number
+  comparable: boolean
+}) {
   if (!comparable || deviation === null) {
     return <span className="pill plan" title="период данных сильно отличается от длительности прогноза">—</span>
   }
-  const abs = Math.abs(deviation)
-  const tone = abs <= 5 ? 'ok' : abs <= 10 ? 'mid' : 'bad'
-  const sign = deviation > 0 ? '+' : '−'
-  return <span className={`pill ${tone}`}>{sign}{fmtDecimal(abs)} п.п.</span>
+  // Отклонение приходит в процентных пунктах ROI, а колонки показывают коэффициент:
+  // выводим в тех же единицах, иначе «3,67 → 4,10» соседствует с «+42,62».
+  const diff = deviation / 100
+  const abs = Math.abs(diff)
+  // цвет — по относительной ошибке: 0,43 на коэффициенте 3,67 и на 0,76 — совершенно разная точность
+  const relative = Math.abs(deviation) / Math.max(100 + forecastRoi, 1) * 100
+  const tone = relative <= 5 ? 'ok' : relative <= 15 ? 'mid' : 'bad'
+  const sign = diff > 0 ? '+' : '−'
+  return (
+    <span
+      className={`pill ${tone}`}
+      title={`${sign}${fmtDecimal(abs)} на каждый вложенный · ${fmtDecimal(relative)} % относительно прогноза`}
+    >
+      {sign}{fmtDecimal(abs)}
+    </span>
+  )
 }

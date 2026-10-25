@@ -18,7 +18,12 @@ public record DashboardResponse(
         long forecastsCompleted,
         List<ChannelRow> channels,
         List<PlanFactRow> planVsFact,
-        BigDecimal planVsFactAvgDeviation
+        /** Средняя абсолютная ошибка по сопоставимым кампаниям, процентные пункты ROI. */
+        BigDecimal planVsFactAvgError,
+        /** Среднее знаковое отклонение: положительное — прогноз занижает. */
+        BigDecimal planVsFactBias,
+        /** Средняя относительная ошибка к прогнозу, проценты. */
+        BigDecimal planVsFactAvgErrorPercent
 ) {
 
     public record ChannelRow(

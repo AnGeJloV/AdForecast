@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 public record CashflowPoint(
-        LocalDate weekStart,
+        LocalDate periodStart,
         BigDecimal cost,
         BigDecimal revenue
 ) {

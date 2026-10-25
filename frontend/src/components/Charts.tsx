@@ -1,8 +1,25 @@
 import { useMemo, useState } from 'react'
-import type { CashflowPoint, DailyMetricPoint } from '../api/types'
+import type { CashflowGranularity, CashflowPoint, DailyMetricPoint } from '../api/types'
+import { MONTHS_SHORT } from '../utils/format'
 
 const AXIS_COLOR = 'rgba(255,255,255,0.4)'
 const GRID_COLOR = 'rgba(255,255,255,0.06)'
+
+/**
+ * Палитра диаграмм — цвета текста статусных бейджей (--ok / --warn / --bad в index.css).
+ * Фон бейджа — тинт того же цвета, он для заливки круга слишком тусклый; читаемый
+ * и при этом родной для темы — именно текстовый оттенок.
+ */
+export const CHART_COLORS = {
+  ok: '#34D399',
+  mid: '#FBBF24',
+  bad: '#F87171',
+  accent: '#F59E0B',
+  info: '#60A5FA',
+  violet: '#A78BFA',
+  slate: '#94A3B8',
+  muted: '#6B7280',
+}
 
 interface DonutSegment {
   label: string
@@ -21,7 +38,11 @@ export function Donut({ segments, centerValue, centerLabel, size = 150 }: {
   return (
     <div className="donut-wrap">
       <svg width={size} height={size} viewBox="0 0 42 42">
-        <circle cx="21" cy="21" r="15.9" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="6.5" />
+        {/* Подложка только для пустой диаграммы: под секторами она подмешивалась
+            к их прозрачному цвету и сдвигала оттенок относительно бейджей. */}
+        {total === 0 && (
+          <circle cx="21" cy="21" r="15.9" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="6.5" />
+        )}
         {total > 0 && segments.map((segment) => {
           const length = (segment.value / total) * 100
           const dash = (
@@ -60,40 +81,86 @@ export function Donut({ segments, centerValue, centerLabel, size = 150 }: {
 
 type BarsMode = 'revenue' | 'cost' | 'profit'
 
-export function WeeklyBars({ points }: { points: CashflowPoint[] }) {
+const compactNumber = new Intl.NumberFormat('ru-RU', { notation: 'compact', maximumFractionDigits: 1 })
+const plainNumber = new Intl.NumberFormat('ru-RU')
+
+/** Подпись корзины: дни и недели — «12.10», месяцы — «окт», кварталы — «3 кв». */
+function periodLabel(iso: string, granularity: CashflowGranularity): string {
+  const [, month, day] = iso.split('-')
+  if (granularity === 'DAY' || granularity === 'WEEK') {
+    return `${day}.${month}`
+  }
+  if (granularity === 'MONTH') {
+    return MONTHS_SHORT[Number(month) - 1]
+  }
+  return `${Math.floor((Number(month) - 1) / 3) + 1} кв`
+}
+
+/** Подписи значений помещаются примерно до 16 столбиков; дальше наезжают друг на друга. */
+const LABELLED_BARS = 16
+
+export function CashflowBars({ points, granularity, periods, period, onPeriodChange }: {
+  points: CashflowPoint[]
+  granularity: CashflowGranularity
+  periods: { value: string; label: string }[]
+  period: string
+  onPeriodChange: (value: string) => void
+}) {
   const [mode, setMode] = useState<BarsMode>('revenue')
   const values = points.map((point) => (
     mode === 'revenue' ? point.revenue : mode === 'cost' ? point.cost : point.revenue - point.cost
   ))
   const max = Math.max(...values.map((value) => Math.abs(value)), 1)
   const lastIndex = values.length - 1
-
-  if (points.length === 0) {
-    return <div className="chart-empty">пока нет данных по выгрузкам</div>
-  }
+  const labelEveryBar = points.length <= LABELLED_BARS
+  // самую крупную корзину подписываем всегда: по ней читается масштаб графика
+  let peakIndex = 0
+  values.forEach((value, index) => {
+    if (Math.abs(value) > Math.abs(values[peakIndex])) {
+      peakIndex = index
+    }
+  })
 
   return (
     <>
-      <div className="chart-tabs">
-        <button className={mode === 'revenue' ? 'active' : ''} onClick={() => setMode('revenue')}>Доход</button>
-        <button className={mode === 'cost' ? 'active' : ''} onClick={() => setMode('cost')}>Расход</button>
-        <button className={mode === 'profit' ? 'active' : ''} onClick={() => setMode('profit')}>Прибыль</button>
+      <div className="chart-controls">
+        <div className="chart-tabs">
+          <button className={mode === 'revenue' ? 'active' : ''} onClick={() => setMode('revenue')}>Доход</button>
+          <button className={mode === 'cost' ? 'active' : ''} onClick={() => setMode('cost')}>Расход</button>
+          <button className={mode === 'profit' ? 'active' : ''} onClick={() => setMode('profit')}>Прибыль</button>
+        </div>
+        <div className="chart-tabs">
+          {periods.map((option) => (
+            <button
+              key={option.value}
+              className={period === option.value ? 'active' : ''}
+              onClick={() => onPeriodChange(option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
       </div>
-      <div className="bars">
-        {values.map((value, index) => (
-          <div className="bar-col" key={points[index].weekStart}>
-            {index === lastIndex && (
-              <span className="bar-tip">{new Intl.NumberFormat('ru-RU', { notation: 'compact' }).format(value)}</span>
-            )}
-            <div
-              className={`bar${index === lastIndex ? ' hot' : ''}`}
-              style={{ height: `${Math.max((Math.abs(value) / max) * 88, 2)}%` }}
-              title={`${new Intl.NumberFormat('ru-RU').format(Math.round(value))}`}
-            />
-            <div className="bar-lbl">{index + 1}</div>
+      {points.length === 0
+        ? <div className="chart-empty">пока нет данных по выгрузкам</div>
+        : (
+          <div className="bars">
+            {values.map((value, index) => (
+              <div className="bar-col" key={points[index].periodStart}>
+                <div
+                  className={`bar${value < 0 ? ' neg' : ''}${index === lastIndex ? ' hot' : ''}`}
+                  style={{ height: `${Math.max((Math.abs(value) / max) * 88, 2)}%` }}
+                  title={`${periodLabel(points[index].periodStart, granularity)}: ${plainNumber.format(Math.round(value))}`}
+                >
+                  {(labelEveryBar || index === peakIndex || index === lastIndex) && (
+                    <span className="bar-val">{compactNumber.format(value)}</span>
+                  )}
+                </div>
+                <div className="bar-lbl">{periodLabel(points[index].periodStart, granularity)}</div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+          )}
     </>
   )
 }

@@ -661,9 +661,11 @@ public class ForecastService {
         if (requested == null) {
             return snapshot.days() + 30;
         }
-        if (requested <= snapshot.days()) {
+        // Длительность, равная числу дней данных, допустима: кампания заканчивается сегодня.
+        // Без этого план всегда покрывал бы больший срок, чем факт, и сравнение было бы смещено.
+        if (requested < snapshot.days()) {
             throw new IllegalArgumentException(
-                    "кампания уже длится " + snapshot.days() + " дней, укажите полную длительность больше");
+                    "кампания уже длится " + snapshot.days() + " дней — полная длительность не может быть меньше");
         }
         return requested;
     }

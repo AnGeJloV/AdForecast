@@ -206,6 +206,7 @@ main { max-width: 1340px; margin: 0 auto; padding: 30px 44px 60px; position: rel
 .donut-legend .r .v { font-weight: 600; font-variant-numeric: tabular-nums; }
 
 /* ===== графики ===== */
+.chart-controls { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .chart-tabs { display: flex; gap: 6px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); border-radius: 999px; padding: 4px; width: fit-content; }
 .chart-tabs button {
   border: none; background: none; color: var(--muted); font-size: 12.5px; font-weight: 600;
@@ -215,13 +216,22 @@ main { max-width: 1340px; margin: 0 auto; padding: 30px 44px 60px; position: rel
 .bars { display: flex; align-items: stretch; gap: 12px; flex: 1 1 auto; min-height: 210px; margin-top: 20px; }
 .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; justify-content: flex-end; position: relative; }
 .bar {
+  position: relative;
   width: 100%; max-width: 46px; border-radius: 999px;
   background: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.07) 0 4px, rgba(255, 255, 255, 0.03) 4px 8px);
   transition: height .3s;
 }
 .bar:hover { background: rgba(245, 158, 11, 0.25); }
 .bar.hot { background: var(--accent); }
-.bar-tip { position: absolute; top: -6px; font-size: 11px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+.bar.neg { background: repeating-linear-gradient(45deg, rgba(248, 113, 113, 0.28) 0 4px, rgba(248, 113, 113, 0.12) 4px 8px); }
+.bar.neg.hot { background: var(--bad); }
+/* подпись значения — над своим столбиком, в паре пикселей от его верхнего края */
+.bar-val {
+  position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%);
+  font-size: 10px; font-weight: 700; color: var(--accent); white-space: nowrap;
+  font-variant-numeric: tabular-nums; letter-spacing: -0.2px;
+}
+.bar.neg .bar-val { color: var(--bad); }
 .bar-lbl { font-size: 10.5px; color: var(--muted); }
 .chart-foot { display: flex; gap: 12px; margin-top: 20px; }
 .foot-pill {
