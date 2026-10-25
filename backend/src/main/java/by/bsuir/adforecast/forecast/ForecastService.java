@@ -54,7 +54,7 @@ public class ForecastService {
     private static final double OWN_HISTORY_CONSTANT = 25.0;
 
     /** Порог обучения модели организации — совпадает с TrainingService.MIN_CAMPAIGNS. */
-    private static final int MIN_CAMPAIGNS_FOR_OWN_MODEL = 10;
+    private static final int MIN_CAMPAIGNS_FOR_OWN_MODEL = 5;
 
     /** Дневной бюджет, ниже которого рекламные площадки не показывают объявления. */
     private static final double MIN_MEANINGFUL_DAY_BUDGET = 20.0;
@@ -311,6 +311,7 @@ public class ForecastService {
                 .orElseThrow(() -> new EntityNotFoundException("пользователь не найден"))
                 .getOrganization().getId();
         orgModelService.triggerIfStale(organizationId);
+        String scope = normalizeScope(request.scope());
         List<CompareResponse> responses = new ArrayList<>();
         for (CompareRequest.CompareVariant variant : request.variants()) {
             String currency = variant.currency() == null || variant.currency().isBlank()
@@ -329,7 +330,7 @@ public class ForecastService {
                     GENERAL_MODEL_NAME,
                     activeGeneral().map(MlModel::getModelVersion).orElse(null));
             Prediction prediction = blend(command, organizationId, budgetBase.doubleValue(),
-                    variant.durationDays(), null, "BLEND");
+                    variant.durationDays(), null, scope);
             responses.add(new CompareResponse(
                     variant.platform(),
                     variant.budget(),
@@ -354,6 +355,15 @@ public class ForecastService {
             ));
         }
         return responses;
+    }
+
+    /** Область расчёта из запроса: пустое/незнакомое значение → BLEND. */
+    private static String normalizeScope(String scope) {
+        if (scope == null) {
+            return "BLEND";
+        }
+        String trimmed = scope.trim().toUpperCase();
+        return "OWN".equals(trimmed) || "GENERAL".equals(trimmed) ? trimmed : "BLEND";
     }
 
     // ----- смешивание моделей и расчёт -----
@@ -432,22 +442,31 @@ public class ForecastService {
             }
         }
 
-        // канал, которого нет в данных модели: прогноз по нему был бы выдумкой
-        if (ownPrediction != null && ownPrediction.platformUnknown()) {
+        // канал, которого нет в данных моделей: обе ответили platform_unknown. Сохраняем «сырые»
+        // ответы, чтобы вместо отказа дать грубую прикидку по опыту модели — с явным предупреждением
+        // о низкой уверенности. Точность вырастет, когда по каналу появятся завершённые кампании.
+        boolean ownUnknown = ownPrediction != null && ownPrediction.platformUnknown();
+        boolean generalUnknown = generalPrediction != null && generalPrediction.platformUnknown();
+        MlPredictResponse generalRaw = generalPrediction;
+        MlPredictResponse ownRaw = ownPrediction;
+        if (ownUnknown) {
             ownPrediction = null;
         }
-        if (generalPrediction != null && generalPrediction.platformUnknown()) {
+        if (generalUnknown) {
             generalPrediction = null;
         }
-        // обе модели отказались по одной причине: канала нет в их обучающих данных.
-        // Подменять отказ усреднённой оценкой по другим кампаниям нельзя — пользователь
-        // прочитает её как расчёт по этому каналу.
-        if (ownPrediction == null && generalPrediction == null) {
-            return warning("NO_CHANNEL_DATA", general, own, ownCampaigns,
-                    "канал «" + command.platform() + "» пока не встречался в данных модели — прогноз по нему невозможен",
-                    "Общая модель знает только каналы из своих обучающих данных. Своя модель обучится"
-                            + " на этом канале, когда появятся ваши завершённые кампании — до тех пор прогноз"
-                            + " по нему не выдается.");
+        boolean channelUnknown = ownPrediction == null && generalPrediction == null;
+        if (channelUnknown) {
+            MlPredictResponse fallback = generalRaw != null ? generalRaw : ownRaw;
+            if (fallback == null) {
+                return warning("NO_CHANNEL_DATA", general, own, ownCampaigns,
+                        "канал «" + command.platform() + "» пока не встречался в данных модели — прогноз по нему невозможен",
+                        "Общая модель знает только каналы из своих обучающих данных. Своя модель обучится"
+                                + " на этом канале, когда появятся ваши завершённые кампании — до тех пор прогноз"
+                                + " по нему не выдается.");
+            }
+            generalPrediction = fallback;
+            weight = 0.0;
         }
         if (generalPrediction == null) {
             weight = 1.0;
@@ -486,10 +505,14 @@ public class ForecastService {
                 : lower >= 1.0 ? "PROFITABLE" : upper < 1.0 ? "UNPROFITABLE" : "BORDERLINE";
 
         MlModel dominant = weight >= 0.5 && own != null ? own : general;
-        String dataNote = "OWN".equals(scope)
-                ? "прогноз только по данным вашей организации: модель обучена на " + ownCampaigns
-                        + " кампаниях, общая модель не используется"
-                : null;
+        String dataNote = channelUnknown
+                ? "канал «" + command.platform() + "» пока не встречался в обучающих данных — это грубая прикидка"
+                        + " по опыту похожих кампаний, точность низкая. Она уточнится, когда по этому каналу"
+                        + " появится достаточно завершённых кампаний (модели дообучатся автоматически)."
+                : "OWN".equals(scope)
+                        ? "прогноз только по данным вашей организации: модель обучена на " + ownCampaigns
+                                + " кампаниях, общая модель не используется"
+                        : null;
         return new Prediction(ratio, lower, upper, agreement, paybackDays, budgetMin, budgetMax, budgetAny,
                 outOfRange, dayBudgetMin, dayBudgetMax, verdict, false,
                 dominant, own, weight, ownCampaigns,

@@ -6,7 +6,7 @@ import type { AnalyzeResponse, CampaignSummary, UploadField, UploadItem, UploadL
 import { Layout } from '../components/Layout'
 import { Select } from '../components/Select'
 import { EmptyState, ErrorBox, PageLoader, Pager } from '../components/Ui'
-import { fmtDate, fmtDateTime, fmtNum, plural, rangeLabel } from '../utils/format'
+import { fmtDate, fmtNum, plural, rangeLabel } from '../utils/format'
 
 const HISTORY_PAGE_SIZE = 6
 
@@ -348,13 +348,17 @@ export function UploadPage() {
                   <div className="fic">{upload.fileFormat === 'XLSX' ? 'XLS' : 'CSV'}</div>
                   <div className="main">
                     <div className="t">{upload.fileName}</div>
-                    <div className="s">
-                      {upload.campaignName} · {fmtDateTime(upload.uploadedAt)} · {fmtNum(upload.rowsCount)}{' '}
-                      {plural(Number(upload.rowsCount), ['строка', 'строки', 'строк'])}
+                    <div className="upl-meta">
+                      <span className="mi"><span className="mk">Кампания</span><b>{upload.campaignName}</b></span>
+                      <span className="mi"><span className="mk">Загружено</span><b>{fmtDate(upload.uploadedAt)}</b></span>
+                      <span className="mi"><span className="mk">Строк</span><b>{fmtNum(upload.rowsCount)}</b></span>
                     </div>
                   </div>
                   <span className="st-pill ok">принят</span>
                 </div>
+                {upload.periodStart && upload.periodEnd && (
+                  <div className="upl-period">Данные за период: {fmtDate(upload.periodStart)} — {fmtDate(upload.periodEnd)}</div>
+                )}
               </div>
             ))}
           {history.length > 0 && (

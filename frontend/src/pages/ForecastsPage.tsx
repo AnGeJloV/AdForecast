@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, ApiError, downloadFile } from '../api/client'
 import type { CampaignSummary, CompareResult, CompareVariant, ForecastListItem } from '../api/types'
@@ -60,6 +60,7 @@ export function ForecastsPage() {
   const [comparing, setComparing] = useState(false)
   const [compareError, setCompareError] = useState('')
   const [results, setResults] = useState<CompareResult[] | null>(null)
+  const [scope, setScope] = useState<'BLEND' | 'OWN' | 'GENERAL'>('BLEND')
   const [pickOpen, setPickOpen] = useState(false)
   const [exportError, setExportError] = useState('')
   const table = useSortTable(forecasts, FORECAST_COLUMNS)
@@ -124,7 +125,7 @@ export function ForecastsPage() {
     }
     setComparing(true)
     try {
-      setResults(await api.compare([variantA, variantB]))
+      setResults(await api.compare([variantA, variantB], scope))
     } catch (cause) {
       setCompareError(cause instanceof ApiError ? cause.message : 'не удалось сравнить варианты')
     } finally {
@@ -174,12 +175,27 @@ export function ForecastsPage() {
             <div className="csub">два сценария бюджета и длительности — куда выгоднее вложиться</div>
           </div>
         </div>
+        <div className="compare-scope">
+          <span className="csub">На чём основан прогноз</span>
+          <div style={{ width: 280 }}>
+            <Select
+              value={scope}
+              options={[
+                { value: 'BLEND', label: 'Своя + общая (рекомендуется)' },
+                { value: 'OWN', label: 'Только свои данные' },
+                { value: 'GENERAL', label: 'Только общая модель' },
+              ]}
+              onChange={(next) => setScope(next as 'BLEND' | 'OWN' | 'GENERAL')}
+            />
+          </div>
+        </div>
         <div className="compare-form">
           {([0, 1] as const).map((index) => {
             const draft = index === 0 ? drafts[0] : drafts[2]
             const setDraft = index === 0 ? drafts[1] : drafts[3]
             return (
-              <div className="variant-editor" key={index}>
+              <Fragment key={index}>
+              <div className="variant-editor">
                 <span className="vtitle">Вариант {index === 0 ? 'А' : 'Б'}</span>
                 <div className="field">
                   <label>Кампания (платформа)</label>
@@ -219,11 +235,14 @@ export function ForecastsPage() {
                   </div>
                 </div>
               </div>
+              {index === 0 && (
+                <button className="cta compare-mid" onClick={compare} disabled={comparing}>
+                  {comparing ? 'Считаем…' : 'Сравнить'}
+                </button>
+              )}
+              </Fragment>
             )
           })}
-          <button className="cta" style={{ padding: '12px 24px' }} onClick={compare} disabled={comparing}>
-            {comparing ? 'Считаем…' : 'Сравнить'}
-          </button>
         </div>
         {compareError && <div className="form-error" style={{ marginTop: 12 }}>{compareError}</div>}
 
@@ -247,16 +266,15 @@ export function ForecastsPage() {
                 return (
                   <div className={`variant${winner === index ? ' winner' : ''}`} key={index}>
                     <div className="name">
-                      {index === 0 ? 'А' : 'Б'} · {fmtMoney(result.budget, result.currency)} / {fmtDays(result.durationDays)}
+                      Вариант {index === 0 ? 'А' : 'Б'} — бюджет {fmtMoney(result.budget, result.currency)}, срок {fmtDays(result.durationDays)}
                       {winner === index && <span className="crown">✓ выгоднее</span>}
                     </div>
                     <div className="roi">{fmtCoef(result.paybackRatio)}</div>
-                    <div className="meta">
-                      {result.platform} · {verdictLabel(result.verdict).toLowerCase()}
-                      {' · интервал '}{fmtCoef(result.intervalLower)}–{fmtCoef(result.intervalUpper)}
-                      {result.paybackMonths === null
-                        ? ' · не окупится за кампанию'
-                        : ` · возврат средств ${fmtDays(result.paybackMonths * 30.44)}`}
+                    <div className="meta meta-line">
+                      <span><i>Канал</i><b>{result.platform}</b></span>
+                      <span><i>Прогноз</i><b>{verdictLabel(result.verdict).toLowerCase()}</b></span>
+                      <span><i>Интервал</i><b>{fmtCoef(result.intervalLower)}–{fmtCoef(result.intervalUpper)}</b></span>
+                      <span><i>Возврат</i><b>{result.paybackMonths === null ? 'не окупится за кампанию' : fmtDays(result.paybackMonths * 30.44)}</b></span>
                     </div>
                     <div className="track">
                       <div
@@ -401,10 +419,11 @@ function PickCampaignModal({ open, campaigns, onClose }: {
   }, [open])
 
   const query = search.trim().toLowerCase()
-  const visible = campaigns.filter((campaign) => !query || campaign.campaignName.toLowerCase().includes(query))
+  // для прогноза показываем только планируемые и активные: по завершённым фактическая окупаемость уже известна
+  const visible = campaigns.filter((campaign) => campaign.status !== 'FINISHED'
+    && (!query || campaign.campaignName.toLowerCase().includes(query)))
   const planned = visible.filter((campaign) => campaign.status === 'PLANNED')
   const active = visible.filter((campaign) => campaign.status === 'ACTIVE')
-  const finished = visible.filter((campaign) => campaign.status === 'FINISHED')
 
   const pick = (id: number) => {
     onClose()
@@ -460,10 +479,8 @@ function PickCampaignModal({ open, campaigns, onClose }: {
       {visible.length === 0 && <EmptyState>кампании не найдены</EmptyState>}
       {group('Планируемые — прогноз до запуска', planned)}
       {group('Активные — пересчитать по текущим данным', active)}
-      {group('Завершённые', finished)}
       <div className="pick-foot">
-        Откроется карточка кампании с формой прогноза: длительность и месяц старта можно изменить
-        перед расчётом. Для завершённых кампаний прогноз не нужен — фактическая окупаемость уже известна.
+        Откроется карточка кампании с формой прогноза: длительность и месяц старта можно изменить перед расчётом.
       </div>
     </Modal>
   )

@@ -15,6 +15,10 @@ const PAGE_SIZE = 10
 type StatusFilter = 'all' | 'ACTIVE' | 'FINISHED' | 'PLANNED'
 
 function displayRatio(campaign: CampaignSummary): number | null {
+  // для завершённой кампании показываем фактическую окупаемость (как в карточке)
+  if (campaign.status === 'FINISHED') {
+    return ratioValue(campaign.actualRoi)
+  }
   if (campaign.latestPaybackRatio !== null) {
     return campaign.latestPaybackRatio
   }
@@ -24,6 +28,10 @@ function displayRatio(campaign: CampaignSummary): number | null {
 function stateLabel(campaign: CampaignSummary): string {
   if (campaign.status === 'PLANNED') {
     return 'планируется'
+  }
+  // завершённая — фактический итог (как в карточке кампании)
+  if (campaign.status === 'FINISHED') {
+    return paybackLabel(paybackTone(ratioValue(campaign.actualRoi)))
   }
   if (campaign.latestVerdict) {
     return verdictLabel(campaign.latestVerdict).toLowerCase()
@@ -151,11 +159,13 @@ export function CampaignsPage() {
                 {pageRows.map((campaign) => {
                   const spent = campaign.budget > 0 ? Math.min((campaign.totalCost / campaign.budget) * 100, 100) : 0
                   const coef = displayRatio(campaign)
-                  const tone = campaign.latestVerdict
-                    ? verdictTone(campaign.latestVerdict)
-                    : campaign.status === 'PLANNED'
-                      ? null
-                      : paybackTone(ratioValue(campaign.actualRoi))
+                  const tone = campaign.status === 'PLANNED'
+                    ? null
+                    : campaign.status === 'FINISHED'
+                      ? paybackTone(ratioValue(campaign.actualRoi))
+                      : campaign.latestVerdict
+                        ? verdictTone(campaign.latestVerdict)
+                        : paybackTone(ratioValue(campaign.actualRoi))
                   return (
                     <tr key={campaign.id} className="clickable" onClick={() => navigate(`/campaigns/${campaign.id}`)}>
                       <td>
@@ -167,7 +177,7 @@ export function CampaignsPage() {
                       <td>{campaign.platform}</td>
                       <td className="mono">
                         {campaign.daysCount > 0
-                          ? `${fmtNum(campaign.daysCount)} ${plural(Number(campaign.daysCount), ['день', 'дня', 'дней'])} · ${fmtNum(campaign.uploadCount)} выгр.`
+                          ? `${fmtNum(campaign.daysCount)} ${plural(Number(campaign.daysCount), ['день', 'дня', 'дней'])} · ${fmtNum(campaign.uploadCount)} ${plural(campaign.uploadCount, ['выгрузка', 'выгрузки', 'выгрузок'])}`
                           : 'нет данных'}
                       </td>
                       <td>
@@ -326,7 +336,7 @@ function CreateCampaignModal({ open, onClose, onCreated }: {
             value={accountId === null ? '' : String(accountId)}
             options={accounts.map((account) => ({
               value: String(account.id),
-              label: `${account.accountName} · ${account.platform}`,
+              label: account.accountName,
             }))}
             onChange={(next) => setAccountId(Number(next))}
             placeholder="выберите кабинет"

@@ -337,11 +337,13 @@ export function DashboardPage() {
               </thead>
               <tbody>
                 {campaigns.slice(0, 6).map((campaign) => {
-                  const tone = campaign.latestVerdict
-                    ? verdictTone(campaign.latestVerdict)
-                    : campaign.status === 'PLANNED'
-                      ? null
-                      : paybackTone(ratioValue(campaign.actualRoi))
+                  const tone = campaign.status === 'PLANNED'
+                    ? null
+                    : campaign.status === 'FINISHED'
+                      ? paybackTone(ratioValue(campaign.actualRoi))
+                      : campaign.latestVerdict
+                        ? verdictTone(campaign.latestVerdict)
+                        : paybackTone(ratioValue(campaign.actualRoi))
                   return (
                     <tr key={campaign.id} className="clickable" onClick={() => navigate(`/campaigns/${campaign.id}`)}>
                       <td>{campaign.campaignName}</td>
@@ -353,7 +355,7 @@ export function DashboardPage() {
                           : '—'}
                       </td>
                       <td className="mono" style={{ fontWeight: 700, color: tone ? `var(--${tone === 'ok' ? 'ok' : tone === 'mid' ? 'warn' : 'bad'})` : undefined }}>
-                        {fmtCoef(campaign.latestPaybackRatio)}
+                        {fmtCoef(campaign.status === 'FINISHED' ? ratioValue(campaign.actualRoi) : campaign.latestPaybackRatio)}
                       </td>
                       <td>
                         {campaign.status === 'PLANNED'

@@ -892,7 +892,7 @@ function CampaignInsightModal({ campaignId, onClose }: { campaignId: number | nu
             <div className="sum-item">
               <div className="k">Данных и выгрузок</div>
               <div className="v" style={{ fontSize: 17 }}>
-                {fmtNum(campaign.daysCount)} дн. / {fmtNum(campaign.uploadCount)} выгр.
+                {fmtNum(campaign.daysCount)} {plural(campaign.daysCount, ['день', 'дня', 'дней'])} / {fmtNum(campaign.uploadCount)} {plural(campaign.uploadCount, ['выгрузка', 'выгрузки', 'выгрузок'])}
               </div>
             </div>
             <div className="sum-item">

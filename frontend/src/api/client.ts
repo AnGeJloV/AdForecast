@@ -201,8 +201,8 @@ export const api = {
     }),
   campaignForecasts: (campaignId: number) => request<ForecastResult[]>(`/api/campaigns/${campaignId}/forecasts`),
   forecasts: () => request<ForecastListItem[]>('/api/forecasts'),
-  compare: (variants: CompareVariant[]) =>
-    request<CompareResult[]>('/api/forecasts/compare', { method: 'POST', body: JSON.stringify({ variants }) }),
+  compare: (variants: CompareVariant[], scope: string = 'BLEND') =>
+    request<CompareResult[]>('/api/forecasts/compare', { method: 'POST', body: JSON.stringify({ variants, scope }) }),
 
   users: () => request<UserItem[]>('/api/users'),
   roles: () => request<RoleItem[]>('/api/users/roles'),

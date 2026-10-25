@@ -11,7 +11,10 @@ public record CompareRequest(
 
         @NotNull
         @Size(min = 1, max = 10)
-        List<CompareVariant> variants
+        List<CompareVariant> variants,
+
+        /** Область расчёта: BLEND (по умолчанию), OWN, GENERAL. */
+        String scope
 ) {
 
     public record CompareVariant(

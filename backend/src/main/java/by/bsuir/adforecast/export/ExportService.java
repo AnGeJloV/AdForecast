@@ -38,6 +38,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 @Service
@@ -206,36 +208,68 @@ public class ExportService {
 
     private byte[] buildPdf(ForecastReport report) {
         try (PDDocument document = new PDDocument()) {
-            PDPage page = new PDPage(PDRectangle.A4);
-            document.addPage(page);
             PDType0Font font = loadFont(document, "fonts/DejaVuSans.ttf");
             PDType0Font bold = loadFont(document, "fonts/DejaVuSans-Bold.ttf");
+            PDRectangle box = PDRectangle.A4;
+            float pageWidth = box.getWidth();
+            float pageHeight = box.getHeight();
+            float marginLeft = 50;
+            float marginRight = 50;
+            float lineHeight = 18;
+            float labelSize = 11, valueSize = 11, titleSize = 13, brandSize = 16;
+
+            List<String[]> rows = report.rows();
+
+            // колонка значений начинается после самой длинной метки — без наложения
+            float maxLabelWidth = 0;
+            for (String[] row : rows) {
+                maxLabelWidth = Math.max(maxLabelWidth, measure(row[0], bold, labelSize));
+            }
+            float valueX = marginLeft + maxLabelWidth + 18;
+            float valueWidth = Math.max(50, (pageWidth - marginRight) - valueX);
+
+            PDPage page = new PDPage(box);
+            document.addPage(page);
             try (PDPageContentStream content = new PDPageContentStream(document, page)) {
-                float y = 790;
+                float y = pageHeight - 70;
                 content.beginText();
-                content.setFont(bold, 16);
-                content.newLineAtOffset(50, y);
+                content.setFont(bold, brandSize);
+                content.newLineAtOffset(marginLeft, y);
                 content.showText("AdForecast");
                 content.endText();
-                y -= 26;
+                y -= 28;
                 content.beginText();
-                content.setFont(bold, 13);
-                content.newLineAtOffset(50, y);
+                content.setFont(bold, titleSize);
+                content.newLineAtOffset(marginLeft, y);
                 content.showText("Отчет о прогнозе окупаемости кампании");
                 content.endText();
                 y -= 30;
-                for (String[] row : report.rows()) {
+
+                for (String[] row : rows) {
+                    List<String> values = wrap(row[1] == null ? "" : row[1], font, valueSize, valueWidth);
+                    int lines = Math.max(1, values.size());
+                    if (y - lines * lineHeight < 50) {
+                        break;
+                    }
                     content.beginText();
-                    content.setFont(bold, 11);
-                    content.newLineAtOffset(50, y);
+                    content.setFont(bold, labelSize);
+                    content.newLineAtOffset(marginLeft, y);
                     content.showText(row[0]);
                     content.endText();
                     content.beginText();
-                    content.setFont(font, 11);
-                    content.newLineAtOffset(230, y);
-                    content.showText(row[1]);
+                    content.setFont(font, valueSize);
+                    content.newLineAtOffset(valueX, y);
+                    content.showText(values.get(0));
                     content.endText();
-                    y -= 20;
+                    y -= lineHeight;
+                    for (int i = 1; i < values.size(); i++) {
+                        content.beginText();
+                        content.setFont(font, valueSize);
+                        content.newLineAtOffset(valueX, y);
+                        content.showText(values.get(i));
+                        content.endText();
+                        y -= lineHeight;
+                    }
                 }
             }
             ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -244,6 +278,38 @@ public class ExportService {
         } catch (IOException exception) {
             throw new IllegalStateException("не удалось сформировать PDF-файл", exception);
         }
+    }
+
+    /** Ширина текста в пунктах при заданном кегле. */
+    private static float measure(String text, PDType0Font font, float size) throws IOException {
+        return text == null ? 0 : font.getStringWidth(text) / 1000f * size;
+    }
+
+    /** Перенос длинного значения по словам, чтобы не уходило за правый край и не наезжало.
+     *  Слишком длинное слово вписывается принудительно. */
+    private static List<String> wrap(String text, PDType0Font font, float size, float maxWidth) throws IOException {
+        List<String> lines = new ArrayList<>();
+        if (text == null || text.isEmpty()) {
+            return lines;
+        }
+        StringBuilder current = new StringBuilder();
+        for (String word : text.split(" ")) {
+            String probe = current.length() == 0 ? word : current + " " + word;
+            if (current.length() == 0 || font.getStringWidth(probe) / 1000f * size <= maxWidth) {
+                if (current.length() > 0) {
+                    current.append(' ');
+                }
+                current.append(word);
+            } else {
+                lines.add(current.toString());
+                current.setLength(0);
+                current.append(word);
+            }
+        }
+        if (current.length() > 0) {
+            lines.add(current.toString());
+        }
+        return lines;
     }
 
     private PDType0Font loadFont(PDDocument document, String path) throws IOException {

@@ -96,10 +96,12 @@ export function CampaignPage() {
               <StatusPill tone={paybackTone(ratioValue(campaign.actualRoi))} label={paybackLabel(paybackTone(ratioValue(campaign.actualRoi)))} />
             )}
           </h1>
-          <div className="sub">
-            {campaign.platform} · {campaign.accountName} · {campaign.daysCount > 0
-              ? `${fmtNum(campaign.daysCount)} ${plural(Number(campaign.daysCount), ['день', 'дня', 'дней'])} данных`
-              : 'нет загруженных данных'}
+          <div className="sub meta-line">
+            <span><i>Платформа</i><b>{campaign.platform}</b></span>
+            <span><i>Кабинет</i><b>{campaign.accountName}</b></span>
+            <span><i>Данных</i><b>{campaign.daysCount > 0
+              ? `${fmtNum(campaign.daysCount)} ${plural(Number(campaign.daysCount), ['день', 'дня', 'дней'])}`
+              : 'нет'}</b></span>
           </div>
         </div>
         <div className="actions">
@@ -127,7 +129,7 @@ export function CampaignPage() {
             <div className="kv"><span className="k">Показы</span><span className="v">{fmtNum(campaign.totalImpressions)}</span></div>
             <div className="kv"><span className="k">Клики</span><span className="v">{fmtNum(campaign.totalClicks)}</span></div>
             <div className="kv"><span className="k">CTR</span><span className="v">{ctr === null ? '—' : `${fmtDecimal(ctr)} %`}</span></div>
-            <div className="kv"><span className="k">Стоимость клика</span><span className="v">{cpc === null ? '—' : fmtMoney(cpc, campaign.currency)}</span></div>
+            <div className="kv"><span className="k">Стоимость клика</span><span className="v">{cpc === null ? '—' : `${fmtDecimal(cpc)} ${campaign.currency}`}</span></div>
           </div>
 
           <div className="card">
@@ -142,9 +144,10 @@ export function CampaignPage() {
                   <div className="fic">{upload.fileFormat === 'XLSX' ? 'XLS' : 'CSV'}</div>
                   <div className="main">
                     <div className="t">{upload.fileName}</div>
-                    <div className="s">
-                      {fmtDateTime(upload.uploadedAt)} · {fmtNum(upload.rowsCount)} {plural(Number(upload.rowsCount), ['строка', 'строки', 'строк'])}
-                      {' · период '}{fmtDate(upload.periodStart)} – {fmtDate(upload.periodEnd)}
+                    <div className="s meta-line">
+                      <span><i>Загружено</i><b>{fmtDateTime(upload.uploadedAt)}</b></span>
+                      <span><i>Строк</i><b>{fmtNum(upload.rowsCount)}</b></span>
+                      <span><i>Период</i><b>{fmtDate(upload.periodStart)} – {fmtDate(upload.periodEnd)}</b></span>
                     </div>
                   </div>
                   <span className="st" style={{ color: 'var(--ok)' }}>✓</span>
@@ -231,6 +234,7 @@ function ForecastCard({ campaign, lastForecast, onCompleted }: {
   const [error, setError] = useState('')
   const [result, setResult] = useState<ForecastResult | null>(lastForecast)
   const [exportError, setExportError] = useState('')
+  const [detailsOpen, setDetailsOpen] = useState(false)
 
   useEffect(() => setResult(lastForecast), [lastForecast])
   useEffect(() => setDuration(String(defaultDuration)), [defaultDuration])
@@ -444,28 +448,12 @@ function ForecastCard({ campaign, lastForecast, onCompleted }: {
               <div className="nums">
                 <div className="n">
                   <div className="v">{fmtCoef(ratio)}</div>
-                  <div className="k">вернётся на каждый вложенный {currency}</div>
+                  <div className="k">на каждый вложенный {currency} вернётся</div>
                 </div>
                 <div className="n">
-                  <div className="v">
-                    {result.agreement === null ? '—' : fmtPercent(result.agreement)}
-                  </div>
+                  <div className="v">{result.paybackDays === null ? '—' : fmtDays(result.paybackDays)}</div>
                   <div className="k">
-                    {result.agreement === null ? 'оценка по фактам, ансамбля нет' : 'согласованность моделей'}
-                  </div>
-                </div>
-                <div className="n">
-                  <div className="v">
-                    {result.paybackWithinDuration
-                      ? (result.paybackDays === null ? '—' : fmtDays(result.paybackDays))
-                      : 'вне срока'}
-                  </div>
-                  <div className="k">
-                    {result.paybackWithinDuration
-                      ? 'срок возврата средств'
-                      : result.paybackDays === null
-                        ? 'не окупится за время кампании'
-                        : `возврат после окончания кампании (≈${fmtDays(result.paybackDays)} с хвостом дохода)`}
+                    {result.paybackDays === null ? 'за это время не окупится' : 'время возврата средств'}
                   </div>
                 </div>
                 {(result.historyDays ?? 0) > 0 && (
@@ -479,17 +467,43 @@ function ForecastCard({ campaign, lastForecast, onCompleted }: {
             </>
           )}
           {result.dataNote && <div className="data-note">⚠ {result.dataNote}</div>}
-          {result.basis && <div className="basis">Основание: {result.basis}</div>}
+
+          {!isWarning && (
+            <div className="forecast-details">
+              <button className="details-toggle" onClick={() => setDetailsOpen((open) => !open)}>
+                <span>{detailsOpen ? 'Скрыть подробности' : 'Подробнее'}</span>
+                <span className="arrow">{detailsOpen ? '▲' : '▼'}</span>
+              </button>
+              {detailsOpen && (
+                <div className="details-body">
+                  <div className="drow"><span className="k">Область расчёта</span><span className="v">{scopeLabel(result.modelScope)}</span></div>
+                  <div className="drow">
+                    <span className="k">Бюджет</span>
+                    <span className="v">
+                      {fmtMoney(budget, currency)}
+                      {result.durationDays
+                        ? ` · ${fmtMoney(budget / result.durationDays, currency)}/день · на ${fmtNum(result.durationDays)} ${plural(result.durationDays, ['день', 'дня', 'дней'])}`
+                        : ''}
+                    </span>
+                  </div>
+                  <div className="drow"><span className="k">Прогнозный интервал (80 %)</span><span className="v">{fmtCoef(intervalLower)}–{fmtCoef(intervalUpper)} на каждый вложенный {currency}</span></div>
+                  <div className="drow"><span className="k">Согласованность моделей</span><span className="v">{result.agreement === null ? '—' : fmtPercent(result.agreement)}</span></div>
+                  <div className="drow">
+                    <span className="k">Модели</span>
+                    <span className="v">
+                      своя {result.ownModelVersion ?? '—'} ({fmtPercent(result.ownWeight)})
+                      {' · общая '}{result.generalModelVersion ?? '—'}
+                      {' · MAPE '}{result.mape === null ? '—' : `${fmtDecimal(result.mape)} %`}
+                    </span>
+                  </div>
+                  <div className="drow"><span className="k">Основание прогноза</span><span className="v">{result.basis}</span></div>
+                  <div className="drow"><span className="k">Рассчитано</span><span className="v">{fmtDateTime(result.startedAt)}</span></div>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="foot">
-            <span className="model">
-              расчёт на {result.durationDays} {plural(Number(result.durationDays ?? 0), ['день', 'дня', 'дней'])}
-              {' · бюджет '}{fmtMoney(budget, currency)}
-              {result.durationDays ? ` (${fmtMoney(budget / result.durationDays, currency)} в день)` : ''}
-              {' · область: '}{scopeLabel(result.modelScope)}
-              {' · своя '}{result.ownModelVersion ?? '—'} · {fmtPercent(result.ownWeight)}
-              {' · общая '}{result.generalModelVersion ?? '—'} · MAPE {result.mape === null ? '—' : `${fmtDecimal(result.mape)} %`}
-              {' · рассчитано '}{fmtDateTime(result.startedAt)}
-            </span>
             <div className="dl">
               <button onClick={() => exportReport('xlsx')}>Экспорт XLSX</button>
               <button onClick={() => exportReport('pdf')}>Экспорт PDF</button>
