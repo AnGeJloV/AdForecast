@@ -17,3 +17,11 @@ db/generator/dataset.csv
 db/generator/cutoff_records.csv
 db/backup/adforecast_*.sql
 *.log
+
+# виртуальные окружения и артефакты тестов
+.venv/
+venv/
+.coverage
+htmlcov/
+.pytest_cache/
+ml-service/scripts/backtest-results.json

@@ -41,6 +41,48 @@ docker compose up --build
 
 Миграции Flyway применяются автоматически; отдельная настройка базы данных не требуется. Базовый сценарий демо-данных можно пересобрать генератором `db/generator/generate.py` (см. `db/generator/README.md`).
 
+## Тестирование
+
+### Backend (JUnit, Mockito, JaCoCo)
+
+```bash
+cd backend
+mvn test
+```
+
+144 теста в 19 классах; отчет покрытия после прогона — `backend/target/site/jacoco/index.html`.
+
+### ML-микросервис (pytest)
+
+```bash
+cd ml-service
+python -m venv .venv
+source .venv/bin/activate      # Windows PowerShell: .venv\Scripts\activate
+pip install -r requirements.txt -r requirements-dev.txt
+pytest --cov=app --cov-branch --cov-report=term
+```
+
+58 тестов; утилита локального обучения `train_local.py` исключена из отчета в `.coveragerc`.
+
+### API-приемка (52 проверки на живом стенде)
+
+Требуется поднятый стек (`docker compose up -d`) и `httpx` (`pip install httpx`):
+
+```bash
+python scripts/api_acceptance.py --base-url http://localhost
+```
+
+Скрипт работает под демо-учетками, создает временную кампанию и временного пользователя и после прогона обезвреживает их — демо-данные остаются в исходном состоянии.
+
+### Бэктест модели
+
+```bash
+cd ml-service
+python scripts/backtest.py --records ../db/generator/cutoff_records.csv
+```
+
+Обучение на 70 % кампаний, проверка на 30 % отложенных; метрики MAPE/R², накрытие 80 % интервала и точность вердикта — в `ml-service/scripts/backtest-results.json`. Прогон детерминирован (seed 42).
+
 ## Демо-учётные записи
 
 | Роль | Логин | Пароль |
@@ -50,9 +92,3 @@ docker compose up --build
 | Маркетолог (личный набор кампаний) | `angejlov` | `adforecastbsuir` |
 
 > Демо-учётка `demo` содержит основной массив кампаний и предназначена для показа. `angejlov` — личная учётка разработчика с компактным набором кампаний всех статусов.
-
-## Архитектурные правила
-
-- Бизнес-логика реализуется только в `backend`.
-- `ml-service` не обращается к базе данных: исходные данные передаются `backend` в теле запроса.
-- Обмен между компонентами — REST, JSON.
